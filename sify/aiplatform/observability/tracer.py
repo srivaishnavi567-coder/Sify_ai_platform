@@ -1,16 +1,16 @@
 # sify/aiplatform/observability/tracer.py
 
-from typing import Dict, Any
 from time import time
-from langfuse import Langfuse, propagate_attributes
+from typing import Dict, Any
+from langfuse import Langfuse
 from .config import get_langfuse_config
 
 _tracer = None
 
 
-# ---------------------------------------------------------------------
-# No-op implementations
-# ---------------------------------------------------------------------
+# ------------------------------------------------------------------
+# No-op tracer (when langfuse disabled)
+# ------------------------------------------------------------------
 
 class NoOpSpan:
     def end(self, *args, **kwargs):
@@ -25,44 +25,32 @@ class NoOpTracer:
         pass
 
 
-# ---------------------------------------------------------------------
-# Langfuse span wrapper (CORRECT Python SDK usage)
-# ---------------------------------------------------------------------
+# ------------------------------------------------------------------
+# Langfuse SPAN (no update method!)
+# ------------------------------------------------------------------
 
 class LangfuseSpan:
     def __init__(self, client: Langfuse, name: str, input: Dict[str, Any]):
         self.client = client
-        self.name = name
-        self.input = input
         self.start_ts = time()
 
-        # Start span using context manager
-        self.ctx = self.client.start_as_current_observation(
+        # Span context
+        self.ctx = client.start_as_current_observation(
             as_type="span",
             name=name,
             input=input,
         )
-        self.root = self.ctx.__enter__()
+        self.ctx.__enter__()
 
     def end(self, output=None, status: str = "success"):
-        duration_ms = round((time() - self.start_ts) * 1000, 2)
-
-        # Correct way in Python SDK
-        self.client.update_current_observation(
-            output=output,
-            metadata={
-                "status": status,
-                "duration_ms": duration_ms,
-            },
-        )
-
-        # Close span
+        # Spans in Langfuse Python DO NOT support update calls
+        # Just close the observation safely
         self.ctx.__exit__(None, None, None)
 
 
-# ---------------------------------------------------------------------
-# Tracer
-# ---------------------------------------------------------------------
+# ------------------------------------------------------------------
+# Tracer wrapper
+# ------------------------------------------------------------------
 
 class LangfuseTracer:
     def __init__(self, client: Langfuse):
@@ -75,9 +63,9 @@ class LangfuseTracer:
         self.client.flush()
 
 
-# ---------------------------------------------------------------------
+# ------------------------------------------------------------------
 # Factory
-# ---------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 def get_tracer():
     global _tracer
@@ -101,4 +89,3 @@ def get_tracer():
     except Exception:
         _tracer = NoOpTracer()
         return _tracer
-
