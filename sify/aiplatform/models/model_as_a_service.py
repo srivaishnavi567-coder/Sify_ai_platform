@@ -224,8 +224,8 @@ class ModelAsAService:
                     raise ValueError(f"{param_name} must not be negative")
 
     # Audio Service Methods
-    def speech_to_text(self, file: BinaryIO, **kwargs) -> AudioTranscriptionResponse:
-        """
+    def speech_to_text(self, file: BinaryIO, **kwargs)-> AudioTranscriptionResponse:
+         """
         Transcribe audio file to text using speech-to-text models.
 
         Args:
@@ -249,37 +249,21 @@ class ModelAsAService:
 
         if self.model_id is None:
             raise ValueError("Model ID must is not set for this instance")
-        
-        # form_data = {"model": self.model_id}
-        # form_data.update(kwargs)
-        
-        # response = self._send_request(
-        #     method="POST",
-        #     endpoint="/v1/audio/transcriptions",
-        #     files={"file": file},
-        #     form_data=form_data
-        # )
-        
-        # return AudioTranscriptionResponse.from_dict(response["result"])
-        span = self.tracer.start_span(
-            "maas.speech_to_text",
-            {"model": self.model_id, "params": kwargs}
-        )
 
+        span = self.tracer.start_span("maas.speech_to_text", {"model": self.model_id})
         try:
             response = self._send_request(
-                method="POST",
-                endpoint="/v1/audio/transcriptions",
+                "POST",
+                "/v1/audio/transcriptions",
                 files={"file": file},
-                form_data={"model": self.model_id, **kwargs}
+                form_data={"model": self.model_id, **kwargs},
             )
-
             span.end(output=response)
             return AudioTranscriptionResponse.from_dict(response["result"])
-
         except Exception as e:
             span.end(status="error", output=str(e))
             raise
+
     def audio_translation(self, file: BinaryIO, **kwargs) -> AudioTranslationResponse:
         """
         Translate audio file in other Languages to English text using speech-to-text models.
@@ -304,44 +288,22 @@ class ModelAsAService:
 
         if self.model_id is None:
             raise ValueError("Model ID must is not set for this instance")
-        
-        # form_data = {"model": self.model_id}
-        # form_data.update(kwargs)
-        
-        # response = self._send_request(
-        #     method="POST",
-        #     endpoint="/v1/audio/translations",
-        #     files={"file": file},
-        #     form_data=form_data
-        # )
 
-        # return AudioTranslationResponse.from_dict(response["result"])
-        span = self.tracer.start_span(
-            "maas.audio_translation",
-            {"model": self.model_id, "params": kwargs}
-        )
-
+        span = self.tracer.start_span("maas.audio_translation", {"model": self.model_id})
         try:
-            form_data = {"model": self.model_id}
-            form_data.update(kwargs)
-
             response = self._send_request(
                 method="POST",
                 endpoint="/v1/audio/translations",
                 files={"file": file},
-                form_data=form_data
+                form_data={"model": self.model_id, **kwargs},
             )
-
             span.end(output=response)
             return AudioTranslationResponse.from_dict(response["result"])
-
         except Exception as e:
             span.end(status="error", output=str(e))
             raise
 
-
-
-    def text_to_speech(self, input_text: str, voice: str, **kwargs) -> bytes:
+    def text_to_speech(self, input_text: str, voice: str, **kwargs)-> bytes:
         """
         Convert text to speech using text-to-speech models.
 
@@ -366,50 +328,31 @@ class ModelAsAService:
 
         if self.model_id is None:
             raise ValueError("Model ID must is not set for this instance")
-        
-        # data = {
-        #     "model": self.model_id,
-        #     "input": input_text,
-        #     "voice": voice
-        # }
-        # data.update(kwargs)
-        
-        # return self._send_request(
-        #     method="POST",
-        #     endpoint="/v1/audio/speech",
-        #     json_data=data,
-        #     return_binary=True
-        # )
-    
-         span = self.tracer.start_span(
-            "maas.text_to_speech",
-            {"model": self.model_id, "voice": voice}
-        )
 
+        span = self.tracer.start_span("maas.text_to_speech", {"model": self.model_id})
         try:
-            data = {
-                "model": self.model_id,
-                "input": input_text,
-                "voice": voice,
-                **kwargs
-            }
-
             audio = self._send_request(
                 method="POST",
                 endpoint="/v1/audio/speech",
-                json_data=data,
-                return_binary=True
+                json_data={
+                    "model": self.model_id,
+                    "input": input_text,
+                    "voice": voice,
+                    **kwargs,
+                },
+                return_binary=True,
             )
-
             span.end(output="binary_audio")
             return audio
-
         except Exception as e:
             span.end(status="error", output=str(e))
             raise
 
-    # Embedding Service Methods
-    def create_embeddings(self, input_data: Union[str, List[str]], **kwargs) -> EmbeddingResponse:
+    # -------------------------------------------------------------------------
+    # EMBEDDINGS
+    # -------------------------------------------------------------------------
+
+    def create_embeddings(self, input_data: Union[str, List[str]], **kwargs)-> EmbeddingResponse:
         """
         Create embeddings for input text using embedding models.
 
@@ -448,31 +391,33 @@ class ModelAsAService:
         
         if self.model_id is None:
             raise ValueError("Model ID must is not set for this instance")
-        span = self.tracer.start_span(
-            "maas.embeddings",
-            {"model": self.model_id}
-        )    
+
+        span = self.tracer.start_span("maas.embeddings", {"model": self.model_id})
         try:
-            data = {
-               "model": self.model_id,
-               "input": input_data
-            }
-            data.update(kwargs)
-        
             response = self._send_request(
                 method="POST",
                 endpoint="/v1/embeddings",
-                json_data=data
-           )
-           span.end(output=response)
-           return EmbeddingResponse.from_dict(response["result"])
+                json_data={
+                    "model": self.model_id,
+                    "input": input_data,
+                    **kwargs,
+                },
+            )
+            span.end(output=response)
+            return EmbeddingResponse.from_dict(response["result"])
         except Exception as e:
             span.end(status="error", output=str(e))
             raise
 
-    # LLM Service Methods
+    # -------------------------------------------------------------------------
+    # CHAT COMPLETION
+    # -------------------------------------------------------------------------
+
     def chat_completion(self, messages: List[Dict[str, Any]], 
-                       stream: bool = False, **kwargs) -> Union[ChatCompletionResponse, Generator[ChatCompletionChunk, None, None]]:
+                   stream: bool = False, **kwargs) -> Union[
+                       ChatCompletionResponse, 
+                       Generator[ChatCompletionChunk, None, None]
+                   ]:
         """
         Create a chat completion using large language models.
 
@@ -503,113 +448,103 @@ class ModelAsAService:
         Raises:
             ValueError: If required parameters are missing or if the API request fails
         """
-        self._validate_required_params({"messages": messages})
-        self._validate_optional_params(kwargs)
-        
-        # Validate messages structure
-        for i, message in enumerate(messages):
-            if not isinstance(message, dict):
-                raise ValueError(f"Message {i} must be a dictionary")
-            if "role" not in message or not message["role"]:
-                raise ValueError(f"Message {i} must have a valid 'role' field")
-            if "content" not in message or not message["content"]:
-                raise ValueError(f"Message {i} must have a valid 'content' field")
-        
-        if self.model_id is None:
-            raise ValueError("Model ID must is not set for this instance")
-        
-        data = {
-            "model": self.model_id,
-            "messages": messages,
-            "stream": stream
-        }
-        data.update(kwargs)
-        
-        span = self.tracer.start_span(
-            "maas.chat_completion",
-           {
-              "model": self.model_id,
-              "stream": stream,
-              "params": kwargs,
-           }
-        )
-        # def _non_stream_generator():
-        #     response = self._send_request(
-        #         method="POST",
-        #         endpoint="/v1/chat/completions",
-        #         json_data=data
-        #     )
-        #     return ChatCompletionResponse.from_dict(response["result"])   
+    self._validate_required_params({"messages": messages})
+    self._validate_optional_params(kwargs)
+    
+    for i, message in enumerate(messages):
+        if not isinstance(message, dict):
+            raise ValueError(f"Message {i} must be a dictionary")
+        if "role" not in message or not message["role"]:
+            raise ValueError(f"Message {i} must have a valid 'role' field")
+        if "content" not in message or not message["content"]:
+            raise ValueError(f"Message {i} must have a valid 'content' field")
+
+    if self.model_id is None:
+        raise ValueError("Model ID must is not set for this instance")
+    
+    data = {
+        "model": self.model_id,
+        "messages": messages,
+        "stream": stream
+    }
+    data.update(kwargs)
+
+    span = self.tracer.start_span(
+        "maas.chat_completion",
+        {"model": self.model_id, "stream": stream, "params": kwargs}
+    )
+
+    def _non_stream_generator():
         try:
             response = self._send_request(
                 method="POST",
                 endpoint="/v1/chat/completions",
                 json_data=data
             )
-
             span.end(output=response)
             return ChatCompletionResponse.from_dict(response["result"])
-
         except Exception as e:
             span.end(status="error", output=str(e))
             raise
-        if stream:
-            def _stream_generator():
-                collected_text = ""
-                model_name = self.model_id
-                chunk_count = 0
-                first_chunk_time = None
-                last_chunk_time = None
-                
-                # stream_generator = self._send_request(
-                #     method="POST",
-                #     endpoint="/v1/chat/completions",
-                #     json_data=data,
-                #     stream=True
-                # )
-                try:
-                    stream_generator = self._send_request(
-                          method="POST",
-                          endpoint="/v1/chat/completions",
-                          json_data=data,
-                          stream=True
-                    )
-                    for chunk_data in stream_generator:
-                        if not chunk_data or not isinstance(chunk_data, dict):
-                           continue
-                        
-                        chunk_count += 1
-                        if first_chunk_time is None:
-                           first_chunk_time = chunk_data.get("created", 0)
-                           last_chunk_time = chunk_data.get("created", 0)
-                    
-                         # Extract content from chunk and accumulate
-                        if "choices" in chunk_data and chunk_data["choices"]:
-                            choice = chunk_data["choices"][0]
-                            if "delta" in choice and "content" in choice["delta"]:
-                                content = choice["delta"]["content"]
-                                if content:
-                                   collected_text += content
-                                
-                        # Yield the chunk as-is for streaming
-                        yield ChatCompletionChunk.from_dict(chunk_data)  
-                     #  END SPAN AFTER STREAM COMPLETES
-                    span.end(
-                       output={
-                           "collected_text": collected_text,
-                           "chunks": chunk_count,
-                           "model": self.model_id
-                        }
-                    )
-                except Exception as e:
-                    span.end(status="error", output=str(e))
-                    raise
-                    
-            return _stream_generator()
-        else:
-            return _non_stream_generator()
 
-    def completion(self, prompt: str, stream: bool = False, **kwargs) -> Union[CompletionResponse, Generator[CompletionChunk, None, None]]:
+    if stream:
+        def _stream_generator():
+            collected_text = ""
+            model_name = self.model_id
+            chunk_count = 0
+            first_chunk_time = None
+            last_chunk_time = None
+
+            try:
+                stream_generator = self._send_request(
+                    method="POST",
+                    endpoint="/v1/chat/completions",
+                    json_data=data,
+                    stream=True
+                )
+
+                for chunk_data in stream_generator:
+                    if not chunk_data or not isinstance(chunk_data, dict):
+                        continue
+                        
+                    chunk_count += 1
+                    if first_chunk_time is None:
+                        first_chunk_time = chunk_data.get("created", 0)
+                    last_chunk_time = chunk_data.get("created", 0)
+
+                    if "choices" in chunk_data and chunk_data["choices"]:
+                        choice = chunk_data["choices"][0]
+                        if "delta" in choice and "content" in choice["delta"]:
+                            content = choice["delta"]["content"]
+                            if content:
+                                collected_text += content
+
+                    yield ChatCompletionChunk.from_dict(chunk_data)
+
+                span.end(
+                    output={
+                        "collected_text": collected_text,
+                        "chunk_count": chunk_count,
+                        "model": model_name
+                    }
+                )
+            except Exception as e:
+                span.end(status="error", output=str(e))
+                raise
+
+        return _stream_generator()
+    else:
+        return _non_stream_generator()
+
+
+    # -------------------------------------------------------------------------
+    # COMPLETION
+    # -------------------------------------------------------------------------
+
+    def completion(self, prompt: str, stream: bool = False, **kwargs) -> Union[
+    CompletionResponse, 
+    Generator[CompletionChunk, None, None]
+]:
         """
         Create a text completion using large language models.
 
@@ -639,48 +574,44 @@ class ModelAsAService:
         Raises:
             ValueError: If required parameters are missing or if the API request fails
         """
-        self._validate_required_params({"prompt": prompt})
-        self._validate_optional_params(kwargs)
-        
-        if self.model_id is None:
-            raise ValueError("Model ID must is not set for this instance")
-        
-        data = {
-            "model": self.model_id,
-            "prompt": prompt,
-            "stream": stream
-        }
-        data.update(kwargs)
-        span = self.tracer.start_span(
-            "maas.completion",
-          {
-            "model": self.model_id,
-            "stream": stream,
-            "params": kwargs,
-          }
-       )    
+    self._validate_required_params({"prompt": prompt})
+    self._validate_optional_params(kwargs)
 
-        def _non_stream_generator():
-            try:
-                response = self._send_request(
-                  method="POST",
-                  endpoint="/v1/completions",
-                  json_data=data
-               )
+    if self.model_id is None:
+        raise ValueError("Model ID must is not set for this instance")
 
-                span.end(output=response)
-                return CompletionResponse.from_dict(response["result"])
-            except Exception as e:
-                span.end(status="error", output=str(e))
-                raise
+    data = {
+        "model": self.model_id,
+        "prompt": prompt,
+        "stream": stream
+    }
+    data.update(kwargs)
 
-        if stream:
-            def _stream_generator():
-                collected_text = ""
-                model_name = self.model_id
-                chunk_count = 0
-                first_chunk_time = None
-                last_chunk_time = None
+    span = self.tracer.start_span(
+        "maas.completion",
+        {"model": self.model_id, "stream": stream, "params": kwargs}
+    )
+
+    def _non_stream_generator():
+        try:
+            response = self._send_request(
+                method="POST",
+                endpoint="/v1/completions",
+                json_data=data
+            )
+            span.end(output=response)
+            return CompletionResponse.from_dict(response["result"])
+        except Exception as e:
+            span.end(status="error", output=str(e))
+            raise
+
+    if stream:
+        def _stream_generator():
+            collected_text = ""
+            model_name = self.model_id
+            chunk_count = 0
+            first_chunk_time = None
+            last_chunk_time = None
 
             try:
                 stream_generator = self._send_request(
@@ -698,8 +629,7 @@ class ModelAsAService:
                     if first_chunk_time is None:
                         first_chunk_time = chunk_data.get("created", 0)
                     last_chunk_time = chunk_data.get("created", 0)
-                    
-                    # Extract content from chunk and accumulate
+
                     if "choices" in chunk_data and chunk_data["choices"]:
                         choice = chunk_data["choices"][0]
                         if "delta" in choice and "content" in choice["delta"]:
@@ -708,52 +638,22 @@ class ModelAsAService:
                                 collected_text += content
 
                     yield CompletionChunk.from_dict(chunk_data)
-                                
-                    span.end(
-                      output={
-                          "collected_text": collected_text,
-                          "chunks": chunk_count,
-                          "model": self.model_id
-                        }
-                    )
+
+                span.end(
+                    output={
+                        "collected_text": collected_text,
+                        "chunk_count": chunk_count,
+                        "model": model_name
+                    }
+                )
             except Exception as e:
                 span.end(status="error", output=str(e))
-                raise        
+                raise
 
-                # After streaming is complete, yield a final summary chunk with usage info
-                # if collected_text:
-                #     # Estimate token usage
-                #     prompt_text = prompt
-                #     estimated_prompt_tokens = len(prompt_text.split())
-                #     estimated_completion_tokens = len(collected_text.split())
-                #     estimated_total_tokens = estimated_prompt_tokens + estimated_completion_tokens
-                    
-                #     # Create a final summary chunk
-                #     summary_chunk = {
-                #         "id": f"cmpl-{chunk_count}",
-                #         "object": "completion.chunk", 
-                #         "created": last_chunk_time or 0,
-                #         "model": model_name,
-                #         "choices": [{
-                #             "index": 0,
-                #             "delta": {},
-                #             "finish_reason": "stop"
-                #         }],
-                #         "usage": {
-                #             "prompt_tokens": estimated_prompt_tokens,
-                #             "completion_tokens": estimated_completion_tokens,
-                #             "total_tokens": estimated_total_tokens
-                #         },
-                #         "stream_summary": {
-                #             "collected_text": collected_text,
-                #             "chunk_count": chunk_count,
-                #             "model": model_name
-                #         }
-                #     }
-                #     yield CompletionChunk.from_dict(summary_chunk)
-            return _stream_generator()
-        else:
-            return _non_stream_generator()
+        return _stream_generator()
+    else:
+        return _non_stream_generator()
+
              
     # Models Service Methods
     def list_models(self) -> ModelsListResponse:
