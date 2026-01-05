@@ -267,22 +267,19 @@ class ModelAsAService:
         )
 
         try:
-            form_data = {"model": self.model_id}
-            form_data.update(kwargs)
-
             response = self._send_request(
                 method="POST",
                 endpoint="/v1/audio/transcriptions",
                 files={"file": file},
-                form_data=form_data
+                form_data={"model": self.model_id, **kwargs}
             )
 
             span.end(output=response)
             return AudioTranscriptionResponse.from_dict(response["result"])
+
         except Exception as e:
             span.end(status="error", output=str(e))
             raise
-
     def audio_translation(self, file: BinaryIO, **kwargs) -> AudioTranslationResponse:
         """
         Translate audio file in other Languages to English text using speech-to-text models.
@@ -319,7 +316,7 @@ class ModelAsAService:
         # )
 
         # return AudioTranslationResponse.from_dict(response["result"])
-         span = self.tracer.start_span(
+        span = self.tracer.start_span(
             "maas.audio_translation",
             {"model": self.model_id, "params": kwargs}
         )
