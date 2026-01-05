@@ -225,7 +225,7 @@ class ModelAsAService:
 
     # Audio Service Methods
     def speech_to_text(self, file: BinaryIO, **kwargs)-> AudioTranscriptionResponse:
-         """
+        """
         Transcribe audio file to text using speech-to-text models.
 
         Args:
