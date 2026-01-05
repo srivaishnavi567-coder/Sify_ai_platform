@@ -65,12 +65,7 @@ class ModelAsAService:
 
             if response.status_code >= 400:
                 raise ValueError(
-                    str(
-                        APIError(
-                            error=response.text,
-                            status_code=response.status_code,
-                        )
-                    )
+                    str(APIError(error=response.text, status_code=response.status_code))
                 )
 
             if stream:
@@ -115,7 +110,10 @@ class ModelAsAService:
         if file is None:
             raise ValueError("File must be provided")
 
-        span = self.tracer.start_span("maas.speech_to_text", {"model": self.model_id})
+        span = self.tracer.start_span(
+            "maas.speech_to_text",
+            {"model": self.model_id},
+        )
 
         try:
             response = self._send_request(
@@ -134,7 +132,10 @@ class ModelAsAService:
         if file is None:
             raise ValueError("File must be provided")
 
-        span = self.tracer.start_span("maas.audio_translation", {"model": self.model_id})
+        span = self.tracer.start_span(
+            "maas.audio_translation",
+            {"model": self.model_id},
+        )
 
         try:
             response = self._send_request(
@@ -152,7 +153,10 @@ class ModelAsAService:
     def text_to_speech(self, input_text: str, voice: str, **kwargs) -> bytes:
         self._validate_required_params({"input_text": input_text, "voice": voice})
 
-        span = self.tracer.start_span("maas.text_to_speech", {"model": self.model_id})
+        span = self.tracer.start_span(
+            "maas.text_to_speech",
+            {"model": self.model_id},
+        )
 
         try:
             audio = self._send_request(
@@ -182,7 +186,10 @@ class ModelAsAService:
 
         self._validate_required_params({"input": input_data})
 
-        span = self.tracer.start_span("maas.embeddings", {"model": self.model_id})
+        span = self.tracer.start_span(
+            "maas.embeddings",
+            {"model": self.model_id},
+        )
 
         try:
             response = self._send_request(
@@ -227,7 +234,9 @@ class ModelAsAService:
         if not stream:
             try:
                 response = self._send_request(
-                    "POST", "/v1/chat/completions", json_data=data
+                    "POST",
+                    "/v1/chat/completions",
+                    json_data=data,
                 )
                 span.end(output=response)
                 return ChatCompletionResponse.from_dict(response["result"])
@@ -239,13 +248,17 @@ class ModelAsAService:
             collected = ""
             try:
                 for chunk in self._send_request(
-                    "POST", "/v1/chat/completions", json_data=data, stream=True
+                    "POST",
+                    "/v1/chat/completions",
+                    json_data=data,
+                    stream=True,
                 ):
                     if "choices" in chunk:
                         delta = chunk["choices"][0].get("delta", {})
                         content = delta.get("content")
                         if content:
                             collected += content
+
                     yield ChatCompletionChunk.from_dict(chunk)
 
                 span.end(output={"text": collected})
@@ -282,7 +295,9 @@ class ModelAsAService:
         if not stream:
             try:
                 response = self._send_request(
-                    "POST", "/v1/completions", json_data=data
+                    "POST",
+                    "/v1/completions",
+                    json_data=data,
                 )
                 span.end(output=response)
                 return CompletionResponse.from_dict(response["result"])
@@ -294,13 +309,17 @@ class ModelAsAService:
             collected = ""
             try:
                 for chunk in self._send_request(
-                    "POST", "/v1/completions", json_data=data, stream=True
+                    "POST",
+                    "/v1/completions",
+                    json_data=data,
+                    stream=True,
                 ):
                     if "choices" in chunk:
                         delta = chunk["choices"][0].get("delta", {})
                         content = delta.get("content")
                         if content:
                             collected += content
+
                     yield CompletionChunk.from_dict(chunk)
 
                 span.end(output={"text": collected})
@@ -327,6 +346,12 @@ class ModelAsAService:
         response = self._send_request(
             "POST",
             "/v1/rerank",
-            json_data={"model": self.model_id, "query": query, "documents": documents},
+            json_data={
+                "model": self.model_id,
+                "query": query,
+                "documents": documents,
+                **kwargs,
+            },
         )
         return RerankResponse.from_dict(response["result"])
+

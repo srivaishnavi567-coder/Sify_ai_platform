@@ -1,63 +1,40 @@
-from typing import Dict, Any
-from .config import get_langfuse_config
-
-_tracer = None
-
-
-
-# No-Op implementations
-
-
-class NoOpSpan:
-    def end(self, *args, **kwargs):
-        pass
-
-
-class NoOpTracer:
-    def start_span(self, *args, **kwargs):
-        return NoOpSpan()
-
-    def span(self, *args, **kwargs):
-        return self.start_span(*args, **kwargs)
-
-# Langfuse Tracer
+from contextlib import contextmanager
+from time import time
+from langfuse import propagate_attributes
+from .span import TraceSpan
+from .client import get_langfuse_client
 
 
 class LangfuseTracer:
-    def __init__(self, client):
-        self.client = client
+    def __init__(self, service_name: str, user_id=None, session_id=None):
+        self.service_name = service_name
+        self.user_id = user_id
+        self.session_id = session_id
+        self.client = get_langfuse_client()
 
-    def start_span(self, name: str, input: Dict[str, Any]):
-        return self.client.span(
+    @contextmanager
+    def trace(self, name: str):
+        if not self.client:
+            yield TraceSpan(None)
+            return
+
+        start_ts = time()
+
+        with self.client.start_as_current_observation(
+            as_type="trace",
             name=name,
-            input=input,
-        )
+        ) as trace:
+            trace.update(metadata={"service": self.service_name})
 
-
-def get_tracer():
-    global _tracer
-
-    if _tracer is not None:
-        return _tracer
-
-    cfg = get_langfuse_config()
-    if not cfg or not cfg.enabled:
-        _tracer = NoOpTracer()
-        return _tracer
-
-    try:
-        from langfuse import Langfuse
-
-        client = Langfuse(
-            public_key=cfg.public_key,
-            secret_key=cfg.secret_key,
-            host=cfg.host,
-        )
-
-        _tracer = LangfuseTracer(client)
-        return _tracer
-
-    except Exception:
-        # Langfuse missing or misconfigured → safe fallback
-        _tracer = NoOpTracer()
-        return _tracer
+            with propagate_attributes(
+                user_id=self.user_id,
+                session_id=self.session_id,
+            ):
+                try:
+                    yield TraceSpan(trace)
+                finally:
+                    trace.update(
+                        metadata={
+                            "duration_ms": round((time() - start_ts) * 1000, 2)
+                        }
+                    )
