@@ -1,4 +1,5 @@
+from .tracer import get_tracer
 from .config import configure_langfuse
-from .tracer import LangfuseTracer
 
-__all__ = ["configure_langfuse", "LangfuseTracer"]
+__all__ = ["get_tracer", "configure_langfuse"]
+
