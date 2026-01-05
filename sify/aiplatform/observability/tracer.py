@@ -1,15 +1,16 @@
 # sify/aiplatform/observability/tracer.py
 
-from typing import Optional, Dict, Any
-from langfuse import Langfuse
+from typing import Dict, Any, Optional
+from time import time
+from langfuse import Langfuse, propagate_attributes
 from .config import get_langfuse_config
 
 _tracer = None
 
 
-# ------------------------------------------------------------------
-# No-Op Tracer (when Langfuse disabled)
-# ------------------------------------------------------------------
+# ---------------------------------------------------------------------
+# No-Op implementations
+# ---------------------------------------------------------------------
 
 class NoOpSpan:
     def end(self, *args, **kwargs):
@@ -20,45 +21,69 @@ class NoOpTracer:
     def start_span(self, *args, **kwargs):
         return NoOpSpan()
 
+    def flush(self):
+        pass
 
-# ------------------------------------------------------------------
-# Langfuse Tracer
-# ------------------------------------------------------------------
+
+# ---------------------------------------------------------------------
+# Real Langfuse span wrapper
+# ---------------------------------------------------------------------
+
+class LangfuseSpan:
+    def __init__(self, root, client: Langfuse, start_ts: float):
+        self.root = root
+        self.client = client
+        self.start_ts = start_ts
+
+    def end(self, output=None, status: str = "success"):
+        duration_ms = round((time() - self.start_ts) * 1000, 2)
+
+        try:
+            self.root.update(
+                output=output,
+                metadata={
+                    "status": status,
+                    "duration_ms": duration_ms,
+                },
+            )
+        finally:
+            pass
+
+
+# ---------------------------------------------------------------------
+# Langfuse tracer
+# ---------------------------------------------------------------------
 
 class LangfuseTracer:
     def __init__(self, client: Langfuse):
         self.client = client
 
     def start_span(self, name: str, input: Dict[str, Any]):
-        return self.client.span(
+        start_ts = time()
+
+        root = self.client.start_as_current_observation(
+            as_type="span",
             name=name,
             input=input,
         )
 
+        return LangfuseSpan(root, self.client, start_ts)
+
     def flush(self):
-        try:
-            self.client.flush()
-        except Exception:
-            pass
+        self.client.flush()
 
 
-# ------------------------------------------------------------------
-# PUBLIC FACTORY (THIS WAS MISSING ❗)
-# ------------------------------------------------------------------
+# ---------------------------------------------------------------------
+# Public factory (singleton)
+# ---------------------------------------------------------------------
 
 def get_tracer():
-    """
-    Returns a singleton tracer.
-    - LangfuseTracer if enabled
-    - NoOpTracer otherwise
-    """
     global _tracer
 
     if _tracer is not None:
         return _tracer
 
     cfg = get_langfuse_config()
-
     if not cfg or not cfg.enabled:
         _tracer = NoOpTracer()
         return _tracer
