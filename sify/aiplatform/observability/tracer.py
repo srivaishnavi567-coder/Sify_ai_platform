@@ -1,6 +1,6 @@
 # sify/aiplatform/observability/tracer.py
 
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 from time import time
 from langfuse import Langfuse, propagate_attributes
 from .config import get_langfuse_config
@@ -9,7 +9,7 @@ _tracer = None
 
 
 # ---------------------------------------------------------------------
-# No-Op implementations
+# No-op implementations
 # ---------------------------------------------------------------------
 
 class NoOpSpan:
@@ -26,32 +26,42 @@ class NoOpTracer:
 
 
 # ---------------------------------------------------------------------
-# Real Langfuse span wrapper
+# Langfuse span wrapper (CORRECT Python SDK usage)
 # ---------------------------------------------------------------------
 
 class LangfuseSpan:
-    def __init__(self, root, client: Langfuse, start_ts: float):
-        self.root = root
+    def __init__(self, client: Langfuse, name: str, input: Dict[str, Any]):
         self.client = client
-        self.start_ts = start_ts
+        self.name = name
+        self.input = input
+        self.start_ts = time()
+
+        # Start span using context manager
+        self.ctx = self.client.start_as_current_observation(
+            as_type="span",
+            name=name,
+            input=input,
+        )
+        self.root = self.ctx.__enter__()
 
     def end(self, output=None, status: str = "success"):
         duration_ms = round((time() - self.start_ts) * 1000, 2)
 
-        try:
-            self.root.update(
-                output=output,
-                metadata={
-                    "status": status,
-                    "duration_ms": duration_ms,
-                },
-            )
-        finally:
-            pass
+        # Correct way in Python SDK
+        self.client.update_current_observation(
+            output=output,
+            metadata={
+                "status": status,
+                "duration_ms": duration_ms,
+            },
+        )
+
+        # Close span
+        self.ctx.__exit__(None, None, None)
 
 
 # ---------------------------------------------------------------------
-# Langfuse tracer
+# Tracer
 # ---------------------------------------------------------------------
 
 class LangfuseTracer:
@@ -59,22 +69,14 @@ class LangfuseTracer:
         self.client = client
 
     def start_span(self, name: str, input: Dict[str, Any]):
-        start_ts = time()
-
-        root = self.client.start_as_current_observation(
-            as_type="span",
-            name=name,
-            input=input,
-        )
-
-        return LangfuseSpan(root, self.client, start_ts)
+        return LangfuseSpan(self.client, name, input)
 
     def flush(self):
         self.client.flush()
 
 
 # ---------------------------------------------------------------------
-# Public factory (singleton)
+# Factory
 # ---------------------------------------------------------------------
 
 def get_tracer():
