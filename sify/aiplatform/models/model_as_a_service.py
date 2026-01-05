@@ -449,91 +449,83 @@ class ModelAsAService:
             ValueError: If required parameters are missing or if the API request fails
         """
     self._validate_required_params({"messages": messages})
-    self._validate_optional_params(kwargs)
-    
-    for i, message in enumerate(messages):
-        if not isinstance(message, dict):
-            raise ValueError(f"Message {i} must be a dictionary")
-        if "role" not in message or not message["role"]:
-            raise ValueError(f"Message {i} must have a valid 'role' field")
-        if "content" not in message or not message["content"]:
-            raise ValueError(f"Message {i} must have a valid 'content' field")
+        self._validate_optional_params(kwargs)
 
-    if self.model_id is None:
-        raise ValueError("Model ID must is not set for this instance")
-    
-    data = {
-        "model": self.model_id,
-        "messages": messages,
-        "stream": stream
-    }
-    data.update(kwargs)
+        for i, message in enumerate(messages):
+            if not isinstance(message, dict):
+                raise ValueError(f"Message {i} must be a dictionary")
+            if "role" not in message or not message["role"]:
+                raise ValueError(f"Message {i} must have a valid 'role' field")
+            if "content" not in message or not message["content"]:
+                raise ValueError(f"Message {i} must have a valid 'content' field")
 
-    span = self.tracer.start_span(
-        "maas.chat_completion",
-        {"model": self.model_id, "stream": stream, "params": kwargs}
-    )
+        if self.model_id is None:
+            raise ValueError("Model ID must is not set for this instance")
 
-    def _non_stream_generator():
-        try:
-            response = self._send_request(
-                method="POST",
-                endpoint="/v1/chat/completions",
-                json_data=data
-            )
-            span.end(output=response)
-            return ChatCompletionResponse.from_dict(response["result"])
-        except Exception as e:
-            span.end(status="error", output=str(e))
-            raise
+        data = {
+            "model": self.model_id,
+            "messages": messages,
+            "stream": stream,
+        }
+        data.update(kwargs)
 
-    if stream:
-        def _stream_generator():
-            collected_text = ""
-            model_name = self.model_id
-            chunk_count = 0
-            first_chunk_time = None
-            last_chunk_time = None
+        span = self.tracer.start_span(
+            "maas.chat_completion",
+            {"model": self.model_id, "stream": stream, "params": kwargs},
+        )
 
+        def _non_stream_generator():
             try:
-                stream_generator = self._send_request(
+                response = self._send_request(
                     method="POST",
                     endpoint="/v1/chat/completions",
                     json_data=data,
-                    stream=True
                 )
-
-                for chunk_data in stream_generator:
-                    if not chunk_data or not isinstance(chunk_data, dict):
-                        continue
-                        
-                    chunk_count += 1
-                    if first_chunk_time is None:
-                        first_chunk_time = chunk_data.get("created", 0)
-                    last_chunk_time = chunk_data.get("created", 0)
-
-                    if "choices" in chunk_data and chunk_data["choices"]:
-                        choice = chunk_data["choices"][0]
-                        if "delta" in choice and "content" in choice["delta"]:
-                            content = choice["delta"]["content"]
-                            if content:
-                                collected_text += content
-
-                    yield ChatCompletionChunk.from_dict(chunk_data)
-
-                span.end(
-                    output={
-                        "collected_text": collected_text,
-                        "chunk_count": chunk_count,
-                        "model": model_name
-                    }
-                )
+                span.end(output=response)
+                return ChatCompletionResponse.from_dict(response["result"])
             except Exception as e:
                 span.end(status="error", output=str(e))
                 raise
 
-        return _stream_generator()
-    else:
+        if stream:
+            def _stream_generator():
+                collected_text = ""
+                chunk_count = 0
+
+                try:
+                    stream_generator = self._send_request(
+                        method="POST",
+                        endpoint="/v1/chat/completions",
+                        json_data=data,
+                        stream=True,
+                    )
+                    for chunk_data in stream_generator:
+                        if not chunk_data or not isinstance(chunk_data, dict):
+                            continue
+
+                        chunk_count += 1
+                        if "choices" in chunk_data and chunk_data["choices"]:
+                            choice = chunk_data["choices"][0]
+                            if "delta" in choice and "content" in choice["delta"]:
+                                content = choice["delta"]["content"]
+                                if content:
+                                    collected_text += content
+
+                        yield ChatCompletionChunk.from_dict(chunk_data)
+
+                    span.end(
+                        output={
+                            "collected_text": collected_text,
+                            "chunks": chunk_count,
+                            "model": self.model_id,
+                        }
+                    )
+                except Exception as e:
+                    span.end(status="error", output=str(e))
+                    raise
+
+            return _stream_generator()
+
         return _non_stream_generator()
 
 
