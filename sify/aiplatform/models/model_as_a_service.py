@@ -141,7 +141,7 @@ class ModelAsAService:
         if file is None:
             raise ValueError("File must be provided")
 
-        span = self.tracer("maas.speech_to_text", {"model": self.model_id})
+        span = self.tracer.start_span("maas.speech_to_text", {"model": self.model_id})
 
         try:
             response = self._send_request(
@@ -170,7 +170,7 @@ class ModelAsAService:
         if file is None:
             raise ValueError("File must be provided")
 
-        span = self.tracer("maas.audio_translation", {"model": self.model_id})
+        span = self.tracer.start_span("maas.audio_translation", {"model": self.model_id})
 
         try:
             response = self._send_request(
@@ -198,7 +198,7 @@ class ModelAsAService:
     def text_to_speech(self, input_text: str, voice: str, **kwargs) -> bytes:
         self._validate_required_params({"input_text": input_text, "voice": voice})
 
-        span = self.tracer("maas.text_to_speech", {"model": self.model_id})
+        span = self.tracer.start_span("maas.text_to_speech", {"model": self.model_id})
 
         try:
             audio = self._send_request(
@@ -236,7 +236,7 @@ class ModelAsAService:
 
         self._validate_required_params({"input": input_data})
 
-        span = self.tracer("maas.embeddings", {"model": self.model_id})
+        span = self.tracer.start_span("maas.embeddings", {"model": self.model_id})
 
         try:
             response = self._send_request(
@@ -286,7 +286,7 @@ class ModelAsAService:
             **kwargs,
         }
 
-        span = self.tracer("maas.chat_completion", data)
+        span = self.tracer.start_span("maas.chat_completion", data)
 
         if not stream:
             try:
@@ -364,7 +364,7 @@ class ModelAsAService:
             **kwargs,
         }
 
-        span = self.tracer("maas.completion", data)
+        span = self.tracer.start_span("maas.completion", data)
 
         if not stream:
             try:
