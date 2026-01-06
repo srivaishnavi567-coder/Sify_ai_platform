@@ -187,14 +187,14 @@ class TracedSpan:
 # --------------------------------------------------
 class LangfuseTracer:
     class LangfuseTracer:
-    def __init__(self, client: Langfuse):
-        self.client = client
+        def __init__(self, client: Langfuse):
+            self.client = client
 
-    def __call__(self, name: str, input: Dict[str, Any]):
-        return TracedSpan(self.client, name, input)
+        def __call__(self, name: str, input: Dict[str, Any]):
+            return TracedSpan(self.client, name, input)
 
-    def flush(self):
-        self.client.flush()
+        def flush(self):
+            self.client.flush()
 
 
 # --------------------------------------------------
