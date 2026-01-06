@@ -110,10 +110,7 @@ class ModelAsAService:
         if file is None:
             raise ValueError("File must be provided")
 
-        span = self.tracer.start_span(
-            "maas.speech_to_text",
-            {"model": self.model_id},
-        )
+        span = self.tracer.start_span("maas.speech_to_text", {"model": self.model_id})
 
         try:
             response = self._send_request(
@@ -122,8 +119,18 @@ class ModelAsAService:
                 files={"file": file},
                 form_data={"model": self.model_id, **kwargs},
             )
-            span.end(output=response)
-            return AudioTranscriptionResponse.from_dict(response["result"])
+
+            result = response["result"]
+
+            span.generation(
+                model=self.model_id,
+                input="audio_file",
+                output=result.get("text"),
+                usage=result.get("usage"),
+            )
+
+            span.end()
+            return AudioTranscriptionResponse.from_dict(result)
         except Exception as e:
             span.end(status="error", output=str(e))
             raise
@@ -132,10 +139,7 @@ class ModelAsAService:
         if file is None:
             raise ValueError("File must be provided")
 
-        span = self.tracer.start_span(
-            "maas.audio_translation",
-            {"model": self.model_id},
-        )
+        span = self.tracer.start_span("maas.audio_translation", {"model": self.model_id})
 
         try:
             response = self._send_request(
@@ -144,8 +148,18 @@ class ModelAsAService:
                 files={"file": file},
                 form_data={"model": self.model_id, **kwargs},
             )
-            span.end(output=response)
-            return AudioTranslationResponse.from_dict(response["result"])
+
+            result = response["result"]
+
+            span.generation(
+                model=self.model_id,
+                input="audio_file",
+                output=result.get("text"),
+                usage=result.get("usage"),
+            )
+
+            span.end()
+            return AudioTranslationResponse.from_dict(result)
         except Exception as e:
             span.end(status="error", output=str(e))
             raise
@@ -153,10 +167,7 @@ class ModelAsAService:
     def text_to_speech(self, input_text: str, voice: str, **kwargs) -> bytes:
         self._validate_required_params({"input_text": input_text, "voice": voice})
 
-        span = self.tracer.start_span(
-            "maas.text_to_speech",
-            {"model": self.model_id},
-        )
+        span = self.tracer.start_span("maas.text_to_speech", {"model": self.model_id})
 
         try:
             audio = self._send_request(
@@ -170,7 +181,15 @@ class ModelAsAService:
                 },
                 return_binary=True,
             )
-            span.end(output="binary_audio")
+
+            span.generation(
+                model=self.model_id,
+                input=input_text,
+                output="binary_audio",
+                usage=None,
+            )
+
+            span.end()
             return audio
         except Exception as e:
             span.end(status="error", output=str(e))
@@ -186,10 +205,7 @@ class ModelAsAService:
 
         self._validate_required_params({"input": input_data})
 
-        span = self.tracer.start_span(
-            "maas.embeddings",
-            {"model": self.model_id},
-        )
+        span = self.tracer.start_span("maas.embeddings", {"model": self.model_id})
 
         try:
             response = self._send_request(
@@ -197,8 +213,18 @@ class ModelAsAService:
                 "/v1/embeddings",
                 json_data={"model": self.model_id, "input": input_data, **kwargs},
             )
-            span.end(output=response)
-            return EmbeddingResponse.from_dict(response["result"])
+
+            result = response["result"]
+
+            span.generation(
+                model=self.model_id,
+                input=input_data,
+                output="embedding_vectors",
+                usage=result.get("usage"),
+            )
+
+            span.end()
+            return EmbeddingResponse.from_dict(result)
         except Exception as e:
             span.end(status="error", output=str(e))
             raise
@@ -238,8 +264,19 @@ class ModelAsAService:
                     "/v1/chat/completions",
                     json_data=data,
                 )
-                span.end(output=response)
-                return ChatCompletionResponse.from_dict(response["result"])
+
+                result = response["result"]
+                output_text = result["choices"][0]["message"]["content"]
+
+                span.generation(
+                    model=self.model_id,
+                    input=messages,
+                    output=output_text,
+                    usage=result.get("usage"),
+                )
+
+                span.end()
+                return ChatCompletionResponse.from_dict(result)
             except Exception as e:
                 span.end(status="error", output=str(e))
                 raise
@@ -258,10 +295,16 @@ class ModelAsAService:
                         content = delta.get("content")
                         if content:
                             collected += content
-
                     yield ChatCompletionChunk.from_dict(chunk)
 
-                span.end(output={"text": collected})
+                span.generation(
+                    model=self.model_id,
+                    input=messages,
+                    output=collected,
+                    usage=None,
+                )
+
+                span.end()
             except Exception as e:
                 span.end(status="error", output=str(e))
                 raise
@@ -299,8 +342,19 @@ class ModelAsAService:
                     "/v1/completions",
                     json_data=data,
                 )
-                span.end(output=response)
-                return CompletionResponse.from_dict(response["result"])
+
+                result = response["result"]
+                output_text = result["choices"][0]["text"]
+
+                span.generation(
+                    model=self.model_id,
+                    input=prompt,
+                    output=output_text,
+                    usage=result.get("usage"),
+                )
+
+                span.end()
+                return CompletionResponse.from_dict(result)
             except Exception as e:
                 span.end(status="error", output=str(e))
                 raise
@@ -319,10 +373,16 @@ class ModelAsAService:
                         content = delta.get("content")
                         if content:
                             collected += content
-
                     yield CompletionChunk.from_dict(chunk)
 
-                span.end(output={"text": collected})
+                span.generation(
+                    model=self.model_id,
+                    input=prompt,
+                    output=collected,
+                    usage=None,
+                )
+
+                span.end()
             except Exception as e:
                 span.end(status="error", output=str(e))
                 raise
@@ -354,4 +414,3 @@ class ModelAsAService:
             },
         )
         return RerankResponse.from_dict(response["result"])
-

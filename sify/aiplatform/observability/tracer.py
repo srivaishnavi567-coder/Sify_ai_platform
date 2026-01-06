@@ -91,82 +91,61 @@
 #         return _tracer
 from time import time
 from typing import Dict, Any
-from langfuse import Langfuse
-from .config import get_langfuse_config
-from .client import get_langfuse_client
-from .context import langfuse_context
-from .span import TraceSpan
+from .client import get_langfuse_client, langfuse_attributes
 
-_tracer = None
-
-
-# -----------------------
-# No-op
-# -----------------------
 
 class NoOpSpan:
-    def generation(self, *args, **kwargs):
-        return kwargs["call_fn"]()
+    def generation(self, **_):
+        pass
 
-    def end(self, *args, **kwargs):
+    def end(self):
         pass
 
 
-class NoOpTracer:
-    def start_span(self, *args, **kwargs):
-        return NoOpSpan()
-
-    def flush(self):
-        pass
-
-
-# -----------------------
-# Langfuse
-# -----------------------
-
-class LangfuseTracer:
-    def __init__(self, client: Langfuse, user_id=None, session_id=None):
+class TracedSpan:
+    def __init__(self, client, name, input):
         self.client = client
-        self.user_id = user_id
-        self.session_id = session_id
-
-    def start_span(self, name: str, input: Dict[str, Any]):
-        ctx = langfuse_context(
-            user_id=self.user_id,
-            session_id=self.session_id,
-        )
-        ctx.__enter__()
-
-        obs = self.client.start_as_current_observation(
+        self.ctx = client.start_as_current_observation(
             as_type="span",
             name=name,
             input=input,
         )
-        obs.__enter__()
+        self.ctx.__enter__()
 
-        return TraceSpan(obs)
+    def generation(
+        self,
+        *,
+        model: str,
+        input,
+        output,
+        usage: Dict[str, int] | None,
+        cost: Dict[str, float] | None = None,
+    ):
+        self.client.generation(
+            name="model-generation",
+            model=model,
+            input=input,
+            output=output,
+            usage_details=usage,
+            cost_details=cost,
+        )
 
-    def flush(self):
-        self.client.flush()
+    def end(self):
+        self.ctx.__exit__(None, None, None)
 
 
-# -----------------------
-# Factory
-# -----------------------
-
-def get_tracer(user_id=None, session_id=None):
-    global _tracer
-
-    cfg = get_langfuse_config()
-    if not cfg or not cfg.enabled:
-        return NoOpTracer()
-
+def get_tracer():
     client = get_langfuse_client()
-    if not client:
-        return NoOpTracer()
+    attrs = langfuse_attributes()
 
-    return LangfuseTracer(
-        client,
-        user_id=user_id,
-        session_id=session_id,
-    )
+    if not client:
+        return lambda *_: NoOpSpan()
+
+    def start_span(name: str, input: Dict[str, Any]):
+        if attrs:
+            with attrs:
+                return TracedSpan(client, name, input)
+        return TracedSpan(client, name, input)
+
+    return start_span
+
