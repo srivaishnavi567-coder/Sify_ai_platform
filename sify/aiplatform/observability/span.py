@@ -78,3 +78,13 @@ class TraceSpan:
             )
 
             return output
+
+    # ✅ ADD THIS METHOD
+    def end(self, *_, **__):
+        """
+        Close the root span safely.
+        Langfuse Python spans do not support update,
+        so this is a no-op placeholder for SDK consistency.
+        """
+        pass
+
