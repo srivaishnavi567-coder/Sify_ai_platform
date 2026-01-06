@@ -15,12 +15,14 @@
 #             yield
 #     else:
 #         yield
+# sify/aiplatform/observability/context.py
+
 from contextlib import contextmanager
 from langfuse import propagate_attributes
 
 
 @contextmanager
-def langfuse_context(user_id=None, session_id=None):
+def langfuse_context(*, user_id=None, session_id=None):
     attrs = {}
     if user_id:
         attrs["user_id"] = user_id
@@ -32,3 +34,4 @@ def langfuse_context(user_id=None, session_id=None):
             yield
     else:
         yield
+

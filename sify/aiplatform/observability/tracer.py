@@ -93,26 +93,33 @@
 
 # sify/aiplatform/observability/tracer.py
 
-from time import time
-from typing import Dict, Any, Optional
+# tracer.py
 
+from typing import Dict, Any, Optional
+from time import time
 from langfuse import Langfuse, propagate_attributes
 
-from .client import get_langfuse_client
 from .config import get_langfuse_config
+from .span import TracedSpan, NoOpSpan
 
 
-# ============================================================
-# No-Op Implementations (Langfuse disabled)
-# ============================================================
+# ---------------------------------------------------------
+# GLOBAL IDENTITY (set once by MaaS)
+# ---------------------------------------------------------
 
-class NoOpSpan:
-    def generation(self, **kwargs):
-        return None
+_user_id: Optional[str] = None
+_session_id: Optional[str] = None
 
-    def end(self, **kwargs):
-        pass
 
+def _set_langfuse_identity(user_id: str | None = None, session_id: str | None = None):
+    global _user_id, _session_id
+    _user_id = user_id
+    _session_id = session_id
+
+
+# ---------------------------------------------------------
+# TRACER IMPLEMENTATIONS
+# ---------------------------------------------------------
 
 class NoOpTracer:
     def __call__(self, *args, **kwargs):
@@ -122,77 +129,26 @@ class NoOpTracer:
         pass
 
 
-# ============================================================
-# Real Traced Span
-# ============================================================
-
-class TracedSpan:
-    def __init__(self, client: Langfuse, name: str, input: Dict[str, Any]):
-        self.client = client
-        self.start_ts = time()
-
-        # IMPORTANT: start span observation
-        self._ctx = client.start_as_current_observation(
-            as_type="span",
-            name=name,
-            input=input,
-        )
-        self._ctx.__enter__()
-
-    # --------------------------------------------------------
-    # Generation (THIS IS WHAT MaaS EXPECTS)
-    # --------------------------------------------------------
-    def generation(
-        self,
-        *,
-        model: str,
-        input,
-        output,
-        usage: Optional[Dict[str, Any]] = None,
-        cost_details: Optional[Dict[str, Any]] = None,
-    ):
-        # Generation must be nested inside span
-        with self.client.start_as_current_observation(
-            as_type="generation",
-            name="model-generation",
-            model=model,
-            input=input,
-        ):
-            self.client.update_current_generation(
-                output={
-                    "role": "assistant",
-                    "content": output,
-                },
-                usage_details=usage,
-                cost_details=cost_details,
-            )
-
-    # --------------------------------------------------------
-    # End span
-    # --------------------------------------------------------
-    def end(self, **kwargs):
-        self._ctx.__exit__(None, None, None)
-
-
-# ============================================================
-# Tracer Wrapper (callable)
-# ============================================================
-
 class LangfuseTracer:
     def __init__(self, client: Langfuse):
         self.client = client
 
-    # THIS is why MaaS can do: self.tracer("name", data)
     def __call__(self, name: str, input: Dict[str, Any]):
-        return TracedSpan(self.client, name, input)
+        return TracedSpan(
+            client=self.client,
+            name=name,
+            input=input,
+            user_id=_user_id,
+            session_id=_session_id,
+        )
 
     def flush(self):
         self.client.flush()
 
 
-# ============================================================
-# Factory (singleton)
-# ============================================================
+# ---------------------------------------------------------
+# FACTORY
+# ---------------------------------------------------------
 
 _tracer = None
 
@@ -204,20 +160,26 @@ def get_tracer():
         return _tracer
 
     cfg = get_langfuse_config()
-
     if not cfg or not cfg.enabled:
         _tracer = NoOpTracer()
         return _tracer
 
     try:
-        client = get_langfuse_client()
-        if not client:
-            raise RuntimeError("Langfuse client not available")
-
+        client = Langfuse(
+            public_key=cfg.public_key,
+            secret_key=cfg.secret_key,
+            host=cfg.host,
+        )
         _tracer = LangfuseTracer(client)
         return _tracer
 
     except Exception:
-        # Absolute safety fallback
         _tracer = NoOpTracer()
         return _tracer
+
+
+# INTERNAL — used ONLY by MaaS
+__all__ = ["get_tracer", "_set_langfuse_identity"]
+
+
+
