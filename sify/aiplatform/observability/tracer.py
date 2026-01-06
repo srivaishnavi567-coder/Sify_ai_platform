@@ -89,25 +89,18 @@
 #     except Exception:
 #         _tracer = NoOpTracer()
 #         return _tracer
-# sify/aiplatform/observability/tracer.py
 
 # sify/aiplatform/observability/tracer.py
 
-# tracer.py
-
-# sify/aiplatform/observability/tracer.py
-
-# sify/aiplatform/observability/tracer.py
-
-# sify/aiplatform/observability/tracer.py
-
+from langfuse import Langfuse, propagate_attributes
 from typing import Dict, Any, Optional
-from langfuse import Langfuse
 from .client import get_langfuse_client
 from .context import langfuse_context
+_tracer = None
+_user_id = None
+_session_id = None
 
-_user_id: Optional[str] = None
-_session_id: Optional[str] = None
+
 
 
 # --------------------------------------------------
@@ -117,6 +110,7 @@ def set_langfuse_identity(user_id=None, session_id=None):
     global _user_id, _session_id
     _user_id = user_id
     _session_id = session_id
+
 
 
 # --------------------------------------------------
@@ -192,18 +186,15 @@ class TracedSpan:
 # Tracer
 # --------------------------------------------------
 class LangfuseTracer:
-    def __init__(self):
-        self.client = get_langfuse_client()
+    class LangfuseTracer:
+    def __init__(self, client: Langfuse):
+        self.client = client
 
     def __call__(self, name: str, input: Dict[str, Any]):
-        if not self.client:
-            return NoOpSpan()
-
         return TracedSpan(self.client, name, input)
 
     def flush(self):
-        if self.client:
-            self.client.flush()
+        self.client.flush()
 
 
 # --------------------------------------------------

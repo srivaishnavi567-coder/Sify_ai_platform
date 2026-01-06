@@ -60,49 +60,25 @@ class NoOpSpan:
 # ---------------------------------------------------------
 
 class TracedSpan:
-    def __init__(
-        self,
-        *,
-        client,
-        name: str,
-        input: Dict[str, Any],
-        user_id: str | None,
-        session_id: str | None,
-    ):
+    def __init__(self, client: Langfuse, name: str, input: Dict[str, Any]):
         self.client = client
-        self.name = name
-        self.input = input
         self.start_ts = time()
 
-        attrs = {}
-        if user_id:
-            attrs["user_id"] = user_id
-        if session_id:
-            attrs["session_id"] = session_id
+        # ✅ THIS is the most important line
+        self._attr_ctx = propagate_attributes(
+            user_id=_user_id,
+            session_id=_session_id,
+        )
+        self._attr_ctx.__enter__()
 
-        self._ctx = propagate_attributes(**attrs)
-        self._ctx.__enter__()
-
-        self._span = client.start_as_current_observation(
+        self._span_ctx = client.start_as_current_observation(
             as_type="span",
             name=name,
             input=input,
         )
-        self._span.__enter__()
+        self._root = self._span_ctx.__enter__()
 
-    # -----------------------------------------------------
-    # GENERATION
-    # -----------------------------------------------------
-
-    def generation(
-        self,
-        *,
-        model: str,
-        input: Any,
-        output: Any,
-        usage: Dict[str, Any] | None = None,
-        cost: Dict[str, Any] | None = None,
-    ):
+    def generation(self, *, model: str, input, output, usage=None, cost=None):
         with self.client.start_as_current_observation(
             as_type="generation",
             name="model-generation",
@@ -115,12 +91,6 @@ class TracedSpan:
                 cost_details=cost,
             )
 
-    # -----------------------------------------------------
-    # END
-    # -----------------------------------------------------
-
-    def end(self, **_):
-        self._span.__exit__(None, None, None)
-        self._ctx.__exit__(None, None, None)
-
-
+    def end(self):
+        self._span_ctx.__exit__(None, None, None)
+        self._attr_ctx.__exit__(None, None, None)
