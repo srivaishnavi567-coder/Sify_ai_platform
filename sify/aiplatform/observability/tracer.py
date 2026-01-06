@@ -140,7 +140,8 @@ class TracedSpan:
         self.client = client
 
         # 🔥 THIS is where user/session is injected
-        self._ctx = langfuse_context(_user_id, _session_id)
+        self._ctx = langfuse_context(user_id=_user_id, session_id=_session_id)
+
         self._ctx.__enter__()
 
         self._span_ctx = client.start_as_current_observation(
