@@ -272,7 +272,7 @@ class ModelAsAService:
                     model=self.model_id,
                     input=messages,
                     output=output_text,
-                    usage=result.get("usage"),
+                    usage=result.get("usage") if result.get("usage") else None,
                 )
 
                 span.end()

@@ -89,63 +89,135 @@
 #     except Exception:
 #         _tracer = NoOpTracer()
 #         return _tracer
-from time import time
-from typing import Dict, Any
-from .client import get_langfuse_client, langfuse_attributes
+# sify/aiplatform/observability/tracer.py
 
+# sify/aiplatform/observability/tracer.py
+
+from time import time
+from typing import Dict, Any, Optional
+
+from langfuse import Langfuse, propagate_attributes
+
+from .client import get_langfuse_client
+from .config import get_langfuse_config
+
+
+# ============================================================
+# No-Op Implementations (Langfuse disabled)
+# ============================================================
 
 class NoOpSpan:
-    def generation(self, **_):
+    def generation(self, **kwargs):
+        return None
+
+    def end(self, **kwargs):
         pass
 
-    def end(self):
+
+class NoOpTracer:
+    def __call__(self, *args, **kwargs):
+        return NoOpSpan()
+
+    def flush(self):
         pass
 
+
+# ============================================================
+# Real Traced Span
+# ============================================================
 
 class TracedSpan:
-    def __init__(self, client, name, input):
+    def __init__(self, client: Langfuse, name: str, input: Dict[str, Any]):
         self.client = client
-        self.ctx = client.start_as_current_observation(
+        self.start_ts = time()
+
+        # IMPORTANT: start span observation
+        self._ctx = client.start_as_current_observation(
             as_type="span",
             name=name,
             input=input,
         )
-        self.ctx.__enter__()
+        self._ctx.__enter__()
 
+    # --------------------------------------------------------
+    # Generation (THIS IS WHAT MaaS EXPECTS)
+    # --------------------------------------------------------
     def generation(
         self,
         *,
         model: str,
         input,
         output,
-        usage: Dict[str, int] | None,
-        cost: Dict[str, float] | None = None,
+        usage: Optional[Dict[str, Any]] = None,
+        cost_details: Optional[Dict[str, Any]] = None,
     ):
-        self.client.generation(
+        # Generation must be nested inside span
+        with self.client.start_as_current_observation(
+            as_type="generation",
             name="model-generation",
             model=model,
             input=input,
-            output=output,
-            usage_details=usage,
-            cost_details=cost,
-        )
+        ):
+            self.client.update_current_generation(
+                output={
+                    "role": "assistant",
+                    "content": output,
+                },
+                usage_details=usage,
+                cost_details=cost_details,
+            )
 
-    def end(self):
-        self.ctx.__exit__(None, None, None)
+    # --------------------------------------------------------
+    # End span
+    # --------------------------------------------------------
+    def end(self, **kwargs):
+        self._ctx.__exit__(None, None, None)
+
+
+# ============================================================
+# Tracer Wrapper (callable)
+# ============================================================
+
+class LangfuseTracer:
+    def __init__(self, client: Langfuse):
+        self.client = client
+
+    # THIS is why MaaS can do: self.tracer("name", data)
+    def __call__(self, name: str, input: Dict[str, Any]):
+        return TracedSpan(self.client, name, input)
+
+    def flush(self):
+        self.client.flush()
+
+
+# ============================================================
+# Factory (singleton)
+# ============================================================
+
+_tracer = None
 
 
 def get_tracer():
-    client = get_langfuse_client()
-    attrs = langfuse_attributes()
+    global _tracer
 
-    if not client:
-        return lambda *_: NoOpSpan()
+    if _tracer is not None:
+        return _tracer
 
-    def start_span(name: str, input: Dict[str, Any]):
-        if attrs:
-            with attrs:
-                return TracedSpan(client, name, input)
-        return TracedSpan(client, name, input)
+    cfg = get_langfuse_config()
 
-    return start_span
+    if not cfg or not cfg.enabled:
+        _tracer = NoOpTracer()
+        return _tracer
 
+    try:
+        client = get_langfuse_client()
+        if not client:
+            raise RuntimeError("Langfuse client not available")
+
+        _tracer = LangfuseTracer(client)
+        return _tracer
+
+    except Exception:
+        # Absolute safety fallback
+        _tracer = NoOpTracer()
+        return _tracer
