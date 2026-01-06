@@ -36,7 +36,7 @@ class ModelAsAService:
 
         try:
             from sify.aiplatform.observability.tracer import _set_identity
-            _set_identity(user_id, session_id)
+            set_langfuse_identity(user_id=user_id, session_id=session_id)
         except Exception:
             pass
 

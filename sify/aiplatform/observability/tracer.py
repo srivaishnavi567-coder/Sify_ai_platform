@@ -97,28 +97,30 @@
 
 # sify/aiplatform/observability/tracer.py
 
-from typing import Dict, Any, Optional
-from time import time
-from langfuse import Langfuse, propagate_attributes
-from .config import get_langfuse_config
+# sify/aiplatform/observability/tracer.py
 
-_tracer = None
+from typing import Dict, Any, Optional
+from contextlib import contextmanager
+from langfuse import Langfuse
+from .client import get_langfuse_client
+from .context import langfuse_context
+
 _user_id: Optional[str] = None
 _session_id: Optional[str] = None
 
 
-# ------------------------------------------------
+# --------------------------------------------------
 # Identity setter (called by MaaS)
-# ------------------------------------------------
-def _set_identity(user_id=None, session_id=None):
+# --------------------------------------------------
+def set_langfuse_identity(user_id=None, session_id=None):
     global _user_id, _session_id
     _user_id = user_id
     _session_id = session_id
 
 
-# ------------------------------------------------
+# --------------------------------------------------
 # No-op
-# ------------------------------------------------
+# --------------------------------------------------
 class NoOpSpan:
     def generation(self, **_): pass
     def end(self): pass
@@ -129,82 +131,90 @@ class NoOpTracer:
     def flush(self): pass
 
 
-# ------------------------------------------------
-# Real Traced Span
-# ------------------------------------------------
-class TracedSpan:
-    def __init__(self, client: Langfuse, name: str, input: Dict[str, Any]):
-        self.client = client
-        self.ctx = None
+# --------------------------------------------------
+# REAL Span (same logic as manual)
+# --------------------------------------------------
+class TraceSpan:
+    def __init__(self, root_span):
+        self.root = root_span
+        self.langfuse = get_langfuse_client()
 
-        # 🔥 user/session MUST be active HERE
-        self._attr_ctx = propagate_attributes(
-            user_id=_user_id,
-            session_id=_session_id,
-        )
-        self._attr_ctx.__enter__()
+    def generation(
+        self,
+        *,
+        model,
+        input,
+        output,
+        usage=None,
+        cost_details=None,
+    ):
+        if not self.root or not self.langfuse:
+            return output
 
-        self.ctx = self.client.start_as_current_observation(
-            as_type="span",
-            name=name,
-            input=input,
-        )
-        self.ctx.__enter__()
-
-    def generation(self, *, model, input, output, usage=None, cost_details=None):
-        # 🔥 generation latency measured ONLY if it's a context manager
-        with self.client.start_as_current_observation(
+        with self.root.start_as_current_observation(
             as_type="generation",
             name="model-generation",
             model=model,
             input=input,
         ):
-            self.client.update_current_generation(
-                output={"role": "assistant", "content": output},
+            self.langfuse.update_current_generation(
+                output={
+                    "role": "assistant",
+                    "content": output,
+                },
                 usage_details=usage,
                 cost_details=cost_details,
             )
 
     def end(self):
-        self.ctx.__exit__(None, None, None)
-        self._attr_ctx.__exit__(None, None, None)
+        pass  # span closed by context manager
 
 
-# ------------------------------------------------
-# Tracer
-# ------------------------------------------------
+# --------------------------------------------------
+# Tracer (THIS is the key change)
+# --------------------------------------------------
 class LangfuseTracer:
-    def __init__(self, client: Langfuse):
-        self.client = client
+    def __init__(self):
+        self.client = get_langfuse_client()
 
     def __call__(self, name: str, input: Dict[str, Any]):
-        return TracedSpan(self.client, name, input)
+        if not self.client:
+            return NoOpSpan()
+
+        @contextmanager
+        def _span():
+            # 🔥 EXACT SAME AS MANUAL METHOD
+            with langfuse_context(_user_id, _session_id):
+                with self.client.start_as_current_observation(
+                    as_type="span",
+                    name=name,
+                    input=input,
+                ) as root:
+                    yield TraceSpan(root)
+
+        return _span()
 
     def flush(self):
-        self.client.flush()
+        if self.client:
+            self.client.flush()
 
 
-# ------------------------------------------------
+# --------------------------------------------------
 # Factory
-# ------------------------------------------------
+# --------------------------------------------------
+_tracer = None
+
 def get_tracer():
     global _tracer
-
     if _tracer:
         return _tracer
 
-    cfg = get_langfuse_config()
-    if not cfg or not cfg.enabled:
+    client = get_langfuse_client()
+    if not client:
         _tracer = NoOpTracer()
-        return _tracer
+    else:
+        _tracer = LangfuseTracer()
 
-    client = Langfuse(
-        public_key=cfg.public_key,
-        secret_key=cfg.secret_key,
-        host=cfg.host,
-    )
-
-    _tracer = LangfuseTracer(client)
     return _tracer
 
 
