@@ -35,8 +35,8 @@ class ModelAsAService:
         self.model_id = model_id.strip() if model_id else None
 
         try:
-            from sify.aiplatform.observability.tracer import _set_langfuse_identity
-            _set_langfuse_identity(user_id, session_id)
+            from sify.aiplatform.observability.tracer import _set_identity
+            _set_identity(user_id, session_id)
         except Exception:
             pass
 

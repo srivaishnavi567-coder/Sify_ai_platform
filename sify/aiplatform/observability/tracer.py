@@ -97,8 +97,8 @@
 
 # sify/aiplatform/observability/tracer.py
 
-from time import time
 from typing import Dict, Any, Optional
+from time import time
 from langfuse import Langfuse, propagate_attributes
 from .config import get_langfuse_config
 
@@ -107,23 +107,21 @@ _user_id: Optional[str] = None
 _session_id: Optional[str] = None
 
 
-# -------------------------------
-# identity setter (internal)
-# -------------------------------
-
-def _set_langfuse_identity(user_id=None, session_id=None):
+# ------------------------------------------------
+# Identity setter (called by MaaS)
+# ------------------------------------------------
+def _set_identity(user_id=None, session_id=None):
     global _user_id, _session_id
     _user_id = user_id
     _session_id = session_id
 
 
-# -------------------------------
-# No-op tracer
-# -------------------------------
-
+# ------------------------------------------------
+# No-op
+# ------------------------------------------------
 class NoOpSpan:
     def generation(self, **_): pass
-    def end(self, **_): pass
+    def end(self): pass
 
 
 class NoOpTracer:
@@ -131,16 +129,22 @@ class NoOpTracer:
     def flush(self): pass
 
 
-# -------------------------------
-# Traced span
-# -------------------------------
-
+# ------------------------------------------------
+# Real Traced Span
+# ------------------------------------------------
 class TracedSpan:
     def __init__(self, client: Langfuse, name: str, input: Dict[str, Any]):
         self.client = client
-        self.start_ts = time()
+        self.ctx = None
 
-        self.ctx = client.start_as_current_observation(
+        # 🔥 user/session MUST be active HERE
+        self._attr_ctx = propagate_attributes(
+            user_id=_user_id,
+            session_id=_session_id,
+        )
+        self._attr_ctx.__enter__()
+
+        self.ctx = self.client.start_as_current_observation(
             as_type="span",
             name=name,
             input=input,
@@ -148,6 +152,7 @@ class TracedSpan:
         self.ctx.__enter__()
 
     def generation(self, *, model, input, output, usage=None, cost_details=None):
+        # 🔥 generation latency measured ONLY if it's a context manager
         with self.client.start_as_current_observation(
             as_type="generation",
             name="model-generation",
@@ -160,38 +165,32 @@ class TracedSpan:
                 cost_details=cost_details,
             )
 
-    def end(self, **_):
+    def end(self):
         self.ctx.__exit__(None, None, None)
+        self._attr_ctx.__exit__(None, None, None)
 
 
-# -------------------------------
-# Tracer wrapper
-# -------------------------------
-
+# ------------------------------------------------
+# Tracer
+# ------------------------------------------------
 class LangfuseTracer:
     def __init__(self, client: Langfuse):
         self.client = client
 
     def __call__(self, name: str, input: Dict[str, Any]):
-        # 🔥 CRITICAL FIX — context applied HERE
-        with propagate_attributes(
-            user_id=_user_id,
-            session_id=_session_id,
-        ):
-            return TracedSpan(self.client, name, input)
+        return TracedSpan(self.client, name, input)
 
     def flush(self):
         self.client.flush()
 
 
-# -------------------------------
+# ------------------------------------------------
 # Factory
-# -------------------------------
-
+# ------------------------------------------------
 def get_tracer():
     global _tracer
 
-    if _tracer is not None:
+    if _tracer:
         return _tracer
 
     cfg = get_langfuse_config()
@@ -204,8 +203,10 @@ def get_tracer():
         secret_key=cfg.secret_key,
         host=cfg.host,
     )
+
     _tracer = LangfuseTracer(client)
     return _tracer
+
 
 
 
