@@ -26,30 +26,26 @@ class ModelAsAService:
         *,
         user_id: str | None = None,
         session_id: str | None = None,
-   ):
+    ):
         if not api_key or not api_key.strip():
-            raise ValueError("API key must be provided and cannot be empty")
+             raise ValueError("API key must be provided and cannot be empty")
 
         self.base_url = "https://infinitai.sifymdp.digital/maas"
         self.api_key = api_key.strip()
         self.model_id = model_id.strip() if model_id else None
 
-     
         try:
-            from sify.aiplatform.observability.tracer import (
-                _set_langfuse_identity,
-                get_tracer,
-            ) 
-
-            _set_langfuse_identity(
-                user_id=user_id,
-                session_id=session_id,
-            )
+            from sify.aiplatform.observability.tracer import _set_langfuse_identity
+            _set_langfuse_identity(user_id, session_id)
         except Exception:
-            # Langfuse not enabled / not installed → ignore
-             pass
+            pass
 
         self.tracer = get_tracer()
+
+
+
+
+
 
     # def __init__(self, api_key: str, model_id: str = None,  *,
     # user_id: str | None = None,
