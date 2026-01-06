@@ -99,8 +99,9 @@
 
 # sify/aiplatform/observability/tracer.py
 
+# sify/aiplatform/observability/tracer.py
+
 from typing import Dict, Any, Optional
-from contextlib import contextmanager
 from langfuse import Langfuse
 from .client import get_langfuse_client
 from .context import langfuse_context
@@ -110,7 +111,7 @@ _session_id: Optional[str] = None
 
 
 # --------------------------------------------------
-# Identity setter (called by MaaS)
+# Identity (set once by MaaS)
 # --------------------------------------------------
 def set_langfuse_identity(user_id=None, session_id=None):
     global _user_id, _session_id
@@ -119,11 +120,11 @@ def set_langfuse_identity(user_id=None, session_id=None):
 
 
 # --------------------------------------------------
-# No-op
+# No-op versions
 # --------------------------------------------------
 class NoOpSpan:
     def generation(self, **_): pass
-    def end(self): pass
+    def end(self, *_, **__): pass
 
 
 class NoOpTracer:
@@ -132,13 +133,26 @@ class NoOpTracer:
 
 
 # --------------------------------------------------
-# REAL Span (same logic as manual)
+# REAL Span object (IMPORTANT)
 # --------------------------------------------------
-class TraceSpan:
-    def __init__(self, root_span):
-        self.root = root_span
-        self.langfuse = get_langfuse_client()
+class TracedSpan:
+    def __init__(self, client: Langfuse, name: str, input: Dict[str, Any]):
+        self.client = client
 
+        # 🔥 THIS is where user/session is injected
+        self._ctx = langfuse_context(_user_id, _session_id)
+        self._ctx.__enter__()
+
+        self._span_ctx = client.start_as_current_observation(
+            as_type="span",
+            name=name,
+            input=input,
+        )
+        self._root = self._span_ctx.__enter__()
+
+    # -----------------------------
+    # Generation (matches manual)
+    # -----------------------------
     def generation(
         self,
         *,
@@ -148,16 +162,13 @@ class TraceSpan:
         usage=None,
         cost_details=None,
     ):
-        if not self.root or not self.langfuse:
-            return output
-
-        with self.root.start_as_current_observation(
+        with self._root.start_as_current_observation(
             as_type="generation",
             name="model-generation",
             model=model,
             input=input,
         ):
-            self.langfuse.update_current_generation(
+            self.client.update_current_generation(
                 output={
                     "role": "assistant",
                     "content": output,
@@ -166,12 +177,18 @@ class TraceSpan:
                 cost_details=cost_details,
             )
 
-    def end(self):
-        pass  # span closed by context manager
+    # -----------------------------
+    # End span
+    # -----------------------------
+    def end(self, *_, **__):
+        # Close span
+        self._span_ctx.__exit__(None, None, None)
+        # Close identity context
+        self._ctx.__exit__(None, None, None)
 
 
 # --------------------------------------------------
-# Tracer (THIS is the key change)
+# Tracer
 # --------------------------------------------------
 class LangfuseTracer:
     def __init__(self):
@@ -181,18 +198,7 @@ class LangfuseTracer:
         if not self.client:
             return NoOpSpan()
 
-        @contextmanager
-        def _span():
-            # 🔥 EXACT SAME AS MANUAL METHOD
-            with langfuse_context(_user_id, _session_id):
-                with self.client.start_as_current_observation(
-                    as_type="span",
-                    name=name,
-                    input=input,
-                ) as root:
-                    yield TraceSpan(root)
-
-        return _span()
+        return TracedSpan(self.client, name, input)
 
     def flush(self):
         if self.client:
@@ -203,6 +209,7 @@ class LangfuseTracer:
 # Factory
 # --------------------------------------------------
 _tracer = None
+
 
 def get_tracer():
     global _tracer
@@ -216,6 +223,7 @@ def get_tracer():
         _tracer = LangfuseTracer()
 
     return _tracer
+
 
 
 
