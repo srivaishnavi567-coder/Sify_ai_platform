@@ -95,10 +95,13 @@
 # sify/aiplatform/observability/tracer.py
 
 from typing import Dict, Any
-from langfuse import Langfuse
+from langfuse import Langfuse, propagate_attributes
+
 from .client import get_langfuse_client
 
-
+# --------------------------------------------------
+# Globals
+# --------------------------------------------------
 _tracer = None
 _user_id = None
 _session_id = None
@@ -114,7 +117,7 @@ def set_langfuse_identity(user_id=None, session_id=None):
 
 
 # --------------------------------------------------
-# No-op
+# No-op fallback
 # --------------------------------------------------
 class NoOpSpan:
     def generation(self, **_): pass
@@ -129,13 +132,13 @@ class NoOpTracer:
 
 
 # --------------------------------------------------
-# REAL Traced Span (FIXED & FINAL)
+# Real span
 # --------------------------------------------------
 class TracedSpan:
     def __init__(self, client: Langfuse, name: str, input: Dict[str, Any]):
         self.client = client
 
-        # ✅ Attributes must be active BEFORE span creation
+        # 🔥 Attributes MUST be active before span creation
         self._attr_ctx = propagate_attributes(
             user_id=_user_id,
             session_id=_session_id,
@@ -172,6 +175,38 @@ class TracedSpan:
     def end(self):
         self._span_ctx.__exit__(None, None, None)
         self._attr_ctx.__exit__(None, None, None)
+
+
+# --------------------------------------------------
+# Tracer wrapper
+# --------------------------------------------------
+class LangfuseTracer:
+    def __init__(self, client: Langfuse):
+        self.client = client
+
+    def start_span(self, name: str, input: Dict[str, Any]):
+        return TracedSpan(self.client, name, input)
+
+    def flush(self):
+        self.client.flush()
+
+
+# --------------------------------------------------
+# FACTORY (THIS IS WHAT YOU ARE MISSING)
+# --------------------------------------------------
+def get_tracer():
+    global _tracer
+    if _tracer:
+        return _tracer
+
+    client = get_langfuse_client()
+    if not client:
+        _tracer = NoOpTracer()
+    else:
+        _tracer = LangfuseTracer(client)
+
+    return _tracer
+
 
 
 
