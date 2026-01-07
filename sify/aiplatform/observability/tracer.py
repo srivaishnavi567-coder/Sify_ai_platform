@@ -136,11 +136,11 @@ class TracedSpan:
         self.client = client
 
         # ✅ KEYWORD ARGUMENTS ONLY
-        self._ctx = langfuse_context(
+        self._attr_ctx = propagate_attributes(
             user_id=_user_id,
             session_id=_session_id,
         )
-        self._ctx.__enter__()
+        self._attr_ctx.__enter__()
 
         self._span_ctx = client.start_as_current_observation(
             as_type="span",
@@ -150,24 +150,43 @@ class TracedSpan:
         self._root = self._span_ctx.__enter__()
 
     def generation(self, *, model, input, output, usage=None, cost_details=None):
-        with self._root.start_as_current_observation(
-            as_type="generation",
-            name="model-generation",
-            model=model,
-            input=input,
+        # with self._root.start_as_current_observation(
+        #     as_type="generation",
+        #     name="model-generation",
+        #     model=model,
+        #     input=input,
+        # ):
+        #     self.client.update_current_generation(
+        #         output={
+        #             "role": "assistant",
+        #             "content": output,
+        #         },
+        #         usage_details=usage,
+        #         cost_details=cost_details,
+        #     )
+        with propagate_attributes(
+            user_id=_user_id,
+            session_id=_session_id,
         ):
-            self.client.update_current_generation(
-                output={
-                    "role": "assistant",
-                    "content": output,
-                },
-                usage_details=usage,
-                cost_details=cost_details,
-            )
+            with self._root.start_as_current_observation(
+                as_type="generation",
+                name="model-generation",
+                model=model,
+                input=input,
+            ):
+                self.client.update_current_generation(
+                    output={
+                        "role": "assistant",
+                        "content": output,
+                  },
+                    usage_details=usage,
+                    cost_details=cost_details,
+                )
+
 
     def end(self):
         self._span_ctx.__exit__(None, None, None)
-        self._ctx.__exit__(None, None, None)
+        self._attr_ctx.__exit__(None, None, None)
 
 
 # --------------------------------------------------
