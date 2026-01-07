@@ -37,11 +37,9 @@ class ModelAsAService:
         self.api_key = api_key.strip()
         self.model_id = model_id.strip() if model_id else None
 
-        try:
-            from sify.aiplatform.observability.tracer import _set_identity
-            set_langfuse_identity(user_id=user_id, session_id=session_id)
-        except Exception:
-            pass
+        
+        set_langfuse_identity(user_id=user_id, session_id=session_id)
+       
 
         self.tracer = get_tracer()
 
@@ -166,7 +164,7 @@ class ModelAsAService:
             span.end()
             return AudioTranscriptionResponse.from_dict(result)
         except Exception as e:
-            span.end(status="error", output=str(e))
+            span.end()
             raise
 
     def audio_translation(self, file: BinaryIO, **kwargs) -> AudioTranslationResponse:
@@ -195,7 +193,7 @@ class ModelAsAService:
             span.end()
             return AudioTranslationResponse.from_dict(result)
         except Exception as e:
-            span.end(status="error", output=str(e))
+            span.end()
             raise
 
     def text_to_speech(self, input_text: str, voice: str, **kwargs) -> bytes:
@@ -226,7 +224,7 @@ class ModelAsAService:
             span.end()
             return audio
         except Exception as e:
-            span.end(status="error", output=str(e))
+            span.end()
             raise
 
     # ---------------------------------------------------------------------
@@ -260,7 +258,7 @@ class ModelAsAService:
             span.end()
             return EmbeddingResponse.from_dict(result)
         except Exception as e:
-            span.end(status="error", output=str(e))
+            span.end()
             raise
 
     # ---------------------------------------------------------------------
@@ -312,7 +310,7 @@ class ModelAsAService:
                 span.end()
                 return ChatCompletionResponse.from_dict(result)
             except Exception as e:
-                span.end(status="error", output=str(e))
+                span.end()
                 raise
 
         def _stream_generator():
@@ -340,7 +338,7 @@ class ModelAsAService:
 
                 span.end()
             except Exception as e:
-                span.end(status="error", output=str(e))
+                span.end()
                 raise
 
         return _stream_generator()
@@ -390,7 +388,7 @@ class ModelAsAService:
                 span.end()
                 return CompletionResponse.from_dict(result)
             except Exception as e:
-                span.end(status="error", output=str(e))
+                span.end()
                 raise
 
         def _stream_generator():
@@ -418,7 +416,7 @@ class ModelAsAService:
 
                 span.end()
             except Exception as e:
-                span.end(status="error", output=str(e))
+                span.end()
                 raise
 
         return _stream_generator()

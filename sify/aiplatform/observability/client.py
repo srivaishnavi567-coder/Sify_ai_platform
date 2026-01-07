@@ -26,7 +26,7 @@
 #     _langfuse_client = Langfuse()
 #     return _langfuse_client
 from typing import Optional
-from langfuse import Langfuse, propagate_attributes
+from langfuse import Langfuse
 from .config import get_langfuse_config
 
 _client: Optional[Langfuse] = None
@@ -48,18 +48,4 @@ def get_langfuse_client() -> Optional[Langfuse]:
         secret_key=cfg.secret_key,
     )
     return _client
-
-
-def langfuse_attributes():
-    cfg = get_langfuse_config()
-    attrs = {}
-
-    if cfg.user_id:
-        attrs["user_id"] = cfg.user_id
-    if cfg.session_id:
-        attrs["session_id"] = cfg.session_id
-
-    if attrs:
-        return propagate_attributes(**attrs)
-    return None
 

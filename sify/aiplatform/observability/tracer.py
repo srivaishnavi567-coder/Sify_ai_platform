@@ -105,7 +105,7 @@ _session_id = None
 
 
 # --------------------------------------------------
-# Identity (called by MaaS ONCE)
+# Identity
 # --------------------------------------------------
 def set_langfuse_identity(user_id=None, session_id=None):
     global _user_id, _session_id
@@ -114,7 +114,7 @@ def set_langfuse_identity(user_id=None, session_id=None):
 
 
 # --------------------------------------------------
-# No-op (Langfuse disabled)
+# No-op
 # --------------------------------------------------
 class NoOpSpan:
     def generation(self, **_): pass
@@ -129,14 +129,17 @@ class NoOpTracer:
 
 
 # --------------------------------------------------
-# REAL Traced Span (FIXED)
+# REAL Traced Span (FIXED & FINAL)
 # --------------------------------------------------
 class TracedSpan:
     def __init__(self, client: Langfuse, name: str, input: Dict[str, Any]):
         self.client = client
 
-        # 🔥 CORRECT ORDER (THIS FIXES USER / SESSION)
-        self._ctx = langfuse_context(_user_id, _session_id)
+        # ✅ KEYWORD ARGUMENTS ONLY
+        self._ctx = langfuse_context(
+            user_id=_user_id,
+            session_id=_session_id,
+        )
         self._ctx.__enter__()
 
         self._span_ctx = client.start_as_current_observation(
@@ -196,6 +199,7 @@ def get_tracer():
         _tracer = LangfuseTracer(client)
 
     return _tracer
+
 
 
 
