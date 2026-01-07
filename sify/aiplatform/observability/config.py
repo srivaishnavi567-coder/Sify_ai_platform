@@ -55,30 +55,17 @@ class LangfuseConfig:
     host: str | None = None
     public_key: str | None = None
     secret_key: str | None = None
-    user_id: str | None = None
-    session_id: str | None = None
 
 
 _cfg = LangfuseConfig()
 
 
-def configure_langfuse(
-    *,
-    enabled: bool,
-    host: str | None = None,
-    public_key: str | None = None,
-    secret_key: str | None = None,
-    user_id: str | None = None,
-    session_id: str | None = None,
-):
+def configure_langfuse(*, enabled: bool, host=None, public_key=None, secret_key=None):
     _cfg.enabled = enabled
     _cfg.host = host
     _cfg.public_key = public_key
     _cfg.secret_key = secret_key
-    _cfg.user_id = user_id
-    _cfg.session_id = session_id
 
 
 def get_langfuse_config() -> LangfuseConfig:
     return _cfg
-

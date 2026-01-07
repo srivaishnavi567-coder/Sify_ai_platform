@@ -15,7 +15,10 @@ from sify.aiplatform.models.types import (
     APIError,
 )
 
-from sify.aiplatform.observability.tracer import get_tracer
+from sify.aiplatform.observability.tracer import (
+    get_tracer,
+    set_langfuse_identity,
+)
 
 
 class ModelAsAService:

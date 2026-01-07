@@ -99,57 +99,46 @@ from langfuse import Langfuse
 from .client import get_langfuse_client
 from .context import langfuse_context
 
-# ------------------------------------------------------------------
-# Globals (SDK-managed)
-# ------------------------------------------------------------------
 _tracer = None
 _user_id = None
 _session_id = None
 
 
-# ------------------------------------------------------------------
-# Identity (set once by MaaS)
-# ------------------------------------------------------------------
+# --------------------------------------------------
+# Identity (called by MaaS ONCE)
+# --------------------------------------------------
 def set_langfuse_identity(user_id=None, session_id=None):
     global _user_id, _session_id
     _user_id = user_id
     _session_id = session_id
 
 
-# ------------------------------------------------------------------
-# No-op versions (Langfuse disabled)
-# ------------------------------------------------------------------
+# --------------------------------------------------
+# No-op (Langfuse disabled)
+# --------------------------------------------------
 class NoOpSpan:
-    def generation(self, **_):
-        pass
-
-    def end(self, *_, **__):
-        pass
+    def generation(self, **_): pass
+    def end(self): pass
 
 
 class NoOpTracer:
     def start_span(self, *_, **__):
         return NoOpSpan()
 
-    def flush(self):
-        pass
+    def flush(self): pass
 
 
-# ------------------------------------------------------------------
-# REAL Span
-# ------------------------------------------------------------------
+# --------------------------------------------------
+# REAL Traced Span (FIXED)
+# --------------------------------------------------
 class TracedSpan:
     def __init__(self, client: Langfuse, name: str, input: Dict[str, Any]):
         self.client = client
 
-        # ✅ Propagate user/session
-        self._identity_ctx = langfuse_context(
-            user_id=_user_id,
-            session_id=_session_id,
-        )
-        self._identity_ctx.__enter__()
+        # 🔥 CORRECT ORDER (THIS FIXES USER / SESSION)
+        self._ctx = langfuse_context(_user_id, _session_id)
+        self._ctx.__enter__()
 
-        # ✅ Root span
         self._span_ctx = client.start_as_current_observation(
             as_type="span",
             name=name,
@@ -157,18 +146,7 @@ class TracedSpan:
         )
         self._root = self._span_ctx.__enter__()
 
-    # -----------------------------
-    # Generation (MODEL CALL)
-    # -----------------------------
-    def generation(
-        self,
-        *,
-        model,
-        input,
-        output,
-        usage=None,
-        cost_details=None,
-    ):
+    def generation(self, *, model, input, output, usage=None, cost_details=None):
         with self._root.start_as_current_observation(
             as_type="generation",
             name="model-generation",
@@ -184,17 +162,14 @@ class TracedSpan:
                 cost_details=cost_details,
             )
 
-    # -----------------------------
-    # Close span
-    # -----------------------------
-    def end(self, *_, **__):
+    def end(self):
         self._span_ctx.__exit__(None, None, None)
-        self._identity_ctx.__exit__(None, None, None)
+        self._ctx.__exit__(None, None, None)
 
 
-# ------------------------------------------------------------------
-# Tracer (THIS WAS BROKEN EARLIER)
-# ------------------------------------------------------------------
+# --------------------------------------------------
+# Tracer
+# --------------------------------------------------
 class LangfuseTracer:
     def __init__(self, client: Langfuse):
         self.client = client
@@ -206,13 +181,12 @@ class LangfuseTracer:
         self.client.flush()
 
 
-# ------------------------------------------------------------------
+# --------------------------------------------------
 # Factory
-# ------------------------------------------------------------------
+# --------------------------------------------------
 def get_tracer():
     global _tracer
-
-    if _tracer is not None:
+    if _tracer:
         return _tracer
 
     client = get_langfuse_client()
@@ -222,6 +196,7 @@ def get_tracer():
         _tracer = LangfuseTracer(client)
 
     return _tracer
+
 
 
 
