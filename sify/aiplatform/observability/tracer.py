@@ -164,6 +164,7 @@ class TracedSpan:
                 input=input,
             ):
                 self.client.update_current_generation(
+                    model=model, 
                     output={
                         "role": "assistant",
                         "content": output,
