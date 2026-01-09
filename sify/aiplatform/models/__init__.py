@@ -1,5 +1,5 @@
 from .model_as_a_service import ModelAsAService
-from .types import (
+from .api_types import (
     ModelInfo,
     ModelsListResponse,
     EmbeddingData,
