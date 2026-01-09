@@ -2,7 +2,7 @@ import json
 import requests
 from typing import Any, Dict, Generator, List, Optional, Union, BinaryIO
 
-from sify.aiplatform.models.types import (
+from sify.aiplatform.models.api_types import (
     ModelsListResponse,
     EmbeddingResponse,
     ChatCompletionResponse,
@@ -31,7 +31,7 @@ class ModelAsAService:
         session_id: str | None = None,
     ):
         if not api_key or not api_key.strip():
-             raise ValueError("API key must be provided and cannot be empty")
+            raise ValueError("API key must be provided and cannot be empty")
 
         self.base_url = "https://infinitai.sifymdp.digital/maas"
         self.api_key = api_key.strip()
@@ -471,9 +471,18 @@ class ModelAsAService:
     # CHAT COMPLETION
     # ---------------------------------------------------------------------
 
-    def chat_completion(self,messages: List[Dict[str, Any]],
-                       stream: bool = False, **kwargs,) -> Union[ChatCompletionResponse, Generator[ChatCompletionChunk, None, None]]:
-         """
+    # def chat_completion(self,messages: List[Dict[str, Any]],
+    #                    stream: bool = False, **kwargs,) -> Union[ChatCompletionResponse, Generator[ChatCompletionChunk, None, None]]:
+    def chat_completion(
+        self,
+        messages: List[Dict[str, Any]],
+        stream: bool = False,
+        **kwargs,
+    ) -> Union[
+        ChatCompletionResponse,
+        Generator[ChatCompletionChunk, None, None],
+    ]:
+        """
         Create a chat completion using large language models.
 
         Args:
@@ -505,7 +514,7 @@ class ModelAsAService:
         """
 
 
-
+       
         self._validate_required_params({"messages": messages})
         self._validate_optional_params(kwargs)
 
@@ -654,7 +663,7 @@ class ModelAsAService:
 
                 span.end()
                 return CompletionResponse.from_dict(result)
-             except Exception as e:
+            except Exception as e:
                 span.end()
                 raise
 
