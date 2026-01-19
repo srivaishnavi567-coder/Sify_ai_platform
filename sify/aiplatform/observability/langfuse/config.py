@@ -48,7 +48,7 @@
 # def get_langfuse_config() -> Optional[LangfuseConfig]:
 #     return _langfuse_config
 from dataclasses import dataclass
-from .detect_app import _detect_app_name
+from sify.aiplatform.observability.langfuse.detect_app import _detect_app_name
 @dataclass
 class LangfuseConfig:
     enabled: bool = False
