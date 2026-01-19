@@ -27,7 +27,8 @@
 #     return _langfuse_client
 from typing import Optional
 from langfuse import Langfuse
-from .config import get_langfuse_config
+from .config import get_langfuse_config,
+from .config import get_app_name
 
 _client: Optional[Langfuse] = None
 
@@ -46,6 +47,7 @@ def get_langfuse_client() -> Optional[Langfuse]:
         host=cfg.host,
         public_key=cfg.public_key,
         secret_key=cfg.secret_key,
+        service_name=get_app_name(),
     )
     return _client
 

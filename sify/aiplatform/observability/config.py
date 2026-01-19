@@ -48,7 +48,7 @@
 # def get_langfuse_config() -> Optional[LangfuseConfig]:
 #     return _langfuse_config
 from dataclasses import dataclass
-
+from .detect_app import _detect_app_name
 @dataclass
 class LangfuseConfig:
     enabled: bool = False
@@ -69,3 +69,11 @@ def configure_langfuse(*, enabled: bool, host=None, public_key=None, secret_key=
 
 def get_langfuse_config() -> LangfuseConfig:
     return _cfg
+# config.py
+_app_name: str | None = None
+
+def get_app_name() -> str:
+    global _app_name
+    if not _app_name:
+        _app_name = _detect_app_name()
+    return _app_name
