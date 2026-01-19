@@ -27,7 +27,7 @@
 #     return _langfuse_client
 from typing import Optional
 from langfuse import Langfuse
-from .config import get_langfuse_config,
+from .config import get_langfuse_config
 from .config import get_app_name
 
 _client: Optional[Langfuse] = None
