@@ -5,7 +5,6 @@ from langfuse import Langfuse
 # from .config import get_app_name
 from sify.aiplatform.observability.langfuse.config import (
     get_langfuse_config,
-    get_app_name,
 )
 _client: Optional[Langfuse] = None
 
