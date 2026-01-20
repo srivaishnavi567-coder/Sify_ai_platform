@@ -270,22 +270,29 @@ class ModelAsAService:
         self._validate_optional_params(kwargs)
         if self.model_id is None:
             raise ValueError("Model ID must is not set for this instance")
+        data = {
+            "model": self.model_id,
+            **kwargs,
+        }    
 
         span = self.tracer.start_span("maas.speech_to_text", {"model": self.model_id})
 
         try:
+            span.start_generation(
+                model=self.model_id,
+                input="audio_file",
+            )
             response = self._send_request(
                 "POST",
                 "/v1/audio/transcriptions",
                 files={"file": file},
-                form_data={"model": self.model_id, **kwargs},
+                form_data=data,
             )
 
             result = response["result"]
 
-            span.generation(
+            span.end_generation(
                 model=self.model_id,
-                input="audio_file",
                 output=result.get("text"),
                 usage=result.get("usage"),
             )
@@ -321,21 +328,29 @@ class ModelAsAService:
 
         if self.model_id is None:
             raise ValueError("Model ID must is not set for this instance")
+
+        data = {
+            "model": self.model_id,
+            **kwargs,
+        }
         span = self.tracer.start_span("maas.audio_translation", {"model": self.model_id})
 
         try:
+            span.start_generation(
+                model=self.model_id,
+                input="audio_file",
+            )
             response = self._send_request(
                 "POST",
                 "/v1/audio/translations",
                 files={"file": file},
-                form_data={"model": self.model_id, **kwargs},
+                form_data=data,
             )
 
             result = response["result"]
 
-            span.generation(
+            span.end_generation(
                 model=self.model_id,
-                input="audio_file",
                 output=result.get("text"),
                 usage=result.get("usage"),
             )
@@ -369,25 +384,28 @@ class ModelAsAService:
 
         if self.model_id is None:
             raise ValueError("Model ID must is not set for this instance")
-
-        span = self.tracer.start_span("maas.text_to_speech", {"model": self.model_id})
+        data = {
+            "model": self.model_id,
+            "input": input_text,
+            "voice": voice,
+            **kwargs,
+        }
+        span = self.tracer.start_span("maas.text_to_speech",  data)
 
         try:
+            span.start_generation(
+                model=self.model_id,
+                input=input_text,
+            )
             audio = self._send_request(
                 "POST",
                 "/v1/audio/speech",
-                json_data={
-                    "model": self.model_id,
-                    "input": input_text,
-                    "voice": voice,
-                    **kwargs,
-                },
+                json_data=data,
                 return_binary=True,
             )
 
-            span.generation(
+            span.end_generation(
                 model=self.model_id,
-                input=input_text,
                 output="binary_audio",
                 usage=None,
             )
@@ -443,6 +461,11 @@ class ModelAsAService:
         
         if self.model_id is None:
             raise ValueError("Model ID must is not set for this instance")
+        data = {
+             "model": self.model_id,
+             "input": input_data,
+             **kwargs,
+        }   
 
         span = self.tracer.start_span("maas.embeddings", {"model": self.model_id})
 
@@ -450,14 +473,13 @@ class ModelAsAService:
             response = self._send_request(
                 "POST",
                 "/v1/embeddings",
-                json_data={"model": self.model_id, "input": input_data, **kwargs},
+                json_data=data,
             )
 
             result = response["result"]
 
-            span.generation(
+            span.end_generation(
                 model=self.model_id,
-                input=input_data,
                 output="embedding_vectors",
                 usage=result.get("usage"),
             )
@@ -543,6 +565,11 @@ class ModelAsAService:
 
         if not stream:
             try:
+
+                span.start_generation(
+                    model=self.model_id,
+                    input=messages,
+                )
                 response = self._send_request(
                     "POST",
                     "/v1/chat/completions",
@@ -552,11 +579,10 @@ class ModelAsAService:
                 result = response["result"]
                 output_text = result["choices"][0]["message"]["content"]
 
-                span.generation(
+                span.end_generation(
                     model=self.model_id,
-                    input=messages,
                     output=output_text,
-                    usage=result.get("usage") if result.get("usage") else None,
+                    usage=result.get("usage"),
                 )
 
                 span.end()
@@ -568,6 +594,10 @@ class ModelAsAService:
         def _stream_generator():
             collected = ""
             try:
+                span.start_generation(
+                    model=self.model_id,
+                    input=messages,
+                )
                 for chunk in self._send_request(
                     "POST",
                     "/v1/chat/completions",
@@ -581,9 +611,8 @@ class ModelAsAService:
                             collected += content
                     yield ChatCompletionChunk.from_dict(chunk)
 
-                span.generation(
+                span.end_generation(
                     model=self.model_id,
-                    input=messages,
                     output=collected,
                     usage=None,
                 )
@@ -646,6 +675,10 @@ class ModelAsAService:
 
         if not stream:
             try:
+                span.start_generation(
+                    model=self.model_id,
+                    input=prompt,
+                )
                 response = self._send_request(
                     "POST",
                     "/v1/completions",
@@ -654,10 +687,9 @@ class ModelAsAService:
 
                 result = response["result"]
                 output_text = result["choices"][0]["text"]
-
-                span.generation(
+                
+                span.end_generation(
                     model=self.model_id,
-                    input=prompt,
                     output=output_text,
                     usage=result.get("usage"),
                 )
@@ -671,6 +703,11 @@ class ModelAsAService:
         def _stream_generator():
             collected = ""
             try:
+                span.start_generation(
+                    model=self.model_id,
+                    input=prompt,
+                )
+                
                 for chunk in self._send_request(
                     "POST",
                     "/v1/completions",
@@ -684,9 +721,8 @@ class ModelAsAService:
                             collected += content
                     yield CompletionChunk.from_dict(chunk)
 
-                span.generation(
+                span.end_generation(
                     model=self.model_id,
-                    input=prompt,
                     output=collected,
                     usage=None,
                 )
