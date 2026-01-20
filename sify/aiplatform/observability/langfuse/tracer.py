@@ -40,11 +40,14 @@ class NoOpTracer:
 # --------------------------------------------------
 # Real span
 # --------------------------------------------------
+from typing import Dict, Any, Optional
+from langfuse import Langfuse, propagate_attributes
+
 class TracedSpan:
     def __init__(self, client: Langfuse, name: str, input: Dict[str, Any]):
         self.client = client
 
-        # 🔥 Attributes MUST be active before span creation
+        
         self._attr_ctx = propagate_attributes(
             user_id=_user_id,
             session_id=_session_id,
@@ -58,30 +61,58 @@ class TracedSpan:
         )
         self._root = self._span_ctx.__enter__()
 
-    def generation(self, *, model, input, output, usage=None, cost_details=None):
+        self._generation_ctx = None  # holds generation context
+
+    def start_generation(self, *, model: str, input: Any):
+        self._generation_ctx = self._root.start_as_current_observation(
+            as_type="generation",
+            name="model-generation",
+            model=model,
+            input=input,
+        )
+        self._generation = self._generation_ctx.__enter__()
+        return self._generation
+
+
+    def end_generation(
+        self,
+        *,
+        model: str,
+        output: Any,
+        usage: Optional[Dict[str, Any]] = None,
+        cost_details: Optional[Dict[str, Any]] = None,
+    ):
+        if not self._generation_ctx:
+            return
+
         with propagate_attributes(
             user_id=_user_id,
             session_id=_session_id,
         ):
-            with self._root.start_as_current_observation(
-                as_type="generation",
-                name="model-generation",
+            self.client.update_current_generation(
                 model=model,
-                input=input,
-            ):
-                self.client.update_current_generation(
-                    model=model, 
-                    output={
-                        "role": "assistant",
-                        "content": output,
-                    },
-                    usage_details=usage,
-                    cost_details=cost_details,
-                )
+                output={
+                    "role": "assistant",
+                    "content": output,
+                },
+                usage_details=usage,
+                cost_details=cost_details,
+            )
 
+        self._generation_ctx.__exit__(None, None, None)
+        self._generation_ctx = None
+
+    # --------------------------------------------------
+    # END SPAN
+    # --------------------------------------------------
     def end(self):
+        # Safety: close generation if still open
+        if self._generation_ctx:
+            self._generation_ctx.__exit__(None, None, None)
+
         self._span_ctx.__exit__(None, None, None)
         self._attr_ctx.__exit__(None, None, None)
+
 
 
 # --------------------------------------------------
