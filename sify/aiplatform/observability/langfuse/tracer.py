@@ -51,6 +51,7 @@ class TracedSpan:
         self._attr_ctx = propagate_attributes(
             user_id=_user_id,
             session_id=_session_id,
+            app_name=detect_app_name(),
         )
         self._attr_ctx.__enter__()
 
