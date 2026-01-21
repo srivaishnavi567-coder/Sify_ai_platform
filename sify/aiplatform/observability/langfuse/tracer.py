@@ -4,7 +4,7 @@ from typing import Dict, Any
 from langfuse import Langfuse, propagate_attributes
 
 from sify.aiplatform.observability.langfuse.client import get_langfuse_client
-
+from sify.aiplatform.observability.langfuse.detect_app import detect_app_name
 # --------------------------------------------------
 # Globals
 # --------------------------------------------------
