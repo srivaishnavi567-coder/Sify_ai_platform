@@ -47,22 +47,28 @@ class TracedSpan:
     def __init__(self, client: Langfuse, name: str, input: Dict[str, Any]):
         self.client = client
 
-        
+        # ✅ Only supported attributes here
         self._attr_ctx = propagate_attributes(
             user_id=_user_id,
             session_id=_session_id,
-            app_name=detect_app_name(),
         )
         self._attr_ctx.__enter__()
 
+        # ✅ Custom metadata goes in span input
         self._span_ctx = client.start_as_current_observation(
             as_type="span",
             name=name,
-            input=input,
+            input={
+                **input,
+                "_observability": {
+                    "app_name": detect_app_name()
+                }
+            },
         )
-        self._root = self._span_ctx.__enter__()
 
-        self._generation_ctx = None  # holds generation context
+        self._root = self._span_ctx.__enter__()
+        self._generation_ctx = None
+
 
     def start_generation(self, *, model: str, input: Any):
         self._generation_ctx = self._root.start_as_current_observation(
