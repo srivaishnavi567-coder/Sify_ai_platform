@@ -74,6 +74,3 @@ def detect_app_name() -> str:
     # 4️⃣ Absolute fallback
     return "unknown_app"
 
-
-    return "sify-client-app"
-
