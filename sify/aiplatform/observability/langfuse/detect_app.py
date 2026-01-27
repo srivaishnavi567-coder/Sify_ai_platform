@@ -85,21 +85,16 @@ INVALID = {
 }
 
 def detect_app_name() -> str:
-    """
-    Detect app name from uvicorn / python execution.
-    Never relies on cwd.
-    """
-
-    # 0️⃣ Explicit override always wins
+    # 0️⃣ Explicit config always wins
     if os.getenv("SIFY_APP_NAME"):
         return os.getenv("SIFY_APP_NAME")
 
-    # 1️⃣ uvicorn module:app  → extract module name
-    # works for: main:app, other_name:app, src.api.server:app
+    # 1️⃣ uvicorn module:app (Windows-safe)
     for arg in sys.argv:
-        if ":" in arg and not arg.startswith("-"):
-            module_part = arg.split(":", 1)[0]
-            name = module_part.split(".")[-1]
+        # must look like module:attr (not a path like C:\...)
+        if ":" in arg and "\\" not in arg and "/" not in arg:
+            module = arg.split(":", 1)[0]
+            name = module.split(".")[-1]
             if name and name not in INVALID:
                 return name
 
@@ -113,5 +108,6 @@ def detect_app_name() -> str:
 
     # 3️⃣ Honest fallback
     return "unknown_app"
+
 
 
