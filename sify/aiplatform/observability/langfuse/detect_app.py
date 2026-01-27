@@ -77,68 +77,41 @@ import os
 import sys
 from pathlib import Path
 
-INVALID_NAMES = {
-    "python",
-    "python3",
-    "ipython",
+INVALID = {
     "uvicorn",
     "gunicorn",
-    "multiprocessing",
+    "python",
     "__main__",
 }
 
-def _clean(name: str | None) -> str | None:
-    if not name:
-        return None
-    name = Path(name).stem
-    return name if name not in INVALID_NAMES else None
-
-
 def detect_app_name() -> str:
     """
-    Determines app name from real app entrypoint or module path.
-    Never uses working directory.
+    Detect app name from uvicorn / python execution.
+    Never relies on cwd.
     """
 
-    # 0️⃣ Explicit override (BEST PRACTICE)
+    # 0️⃣ Explicit override always wins
     if os.getenv("SIFY_APP_NAME"):
         return os.getenv("SIFY_APP_NAME")
 
-    # 1️⃣ python app.py
+    # 1️⃣ uvicorn module:app  → extract module name
+    # works for: main:app, other_name:app, src.api.server:app
+    for arg in sys.argv:
+        if ":" in arg and not arg.startswith("-"):
+            module_part = arg.split(":", 1)[0]
+            name = module_part.split(".")[-1]
+            if name and name not in INVALID:
+                return name
+
+    # 2️⃣ python file.py
     try:
-        name = _clean(sys.argv[0])
-        if name:
-            return name
+        entry = Path(sys.argv[0]).stem
+        if entry and entry not in INVALID:
+            return entry
     except Exception:
         pass
 
-    # 2️⃣ python -m module OR uvicorn main:app
-    try:
-        import __main__
-        main_file = getattr(__main__, "__file__", None)
-        name = _clean(main_file)
-        if name:
-            return name
-    except Exception:
-        pass
-
-    # 3️⃣ Inspect loaded modules (works for uvicorn/docker)
-    try:
-        for m in sys.modules.values():
-            file = getattr(m, "__file__", None)
-            if not file:
-                continue
-
-            p = Path(file)
-            if "site-packages" in p.parts:
-                continue
-            if "uvicorn" in p.parts or "gunicorn" in p.parts:
-                continue
-
-            return p.stem
-    except Exception:
-        pass
-
-    # 4️⃣ Honest fallback
+    # 3️⃣ Honest fallback
     return "unknown_app"
+
 
