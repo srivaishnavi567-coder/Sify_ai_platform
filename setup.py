@@ -19,7 +19,8 @@ setup(
     ],
     python_requires=">=3.8",
     install_requires=[
-        "requests"
+        "requests",
+        "langfuse"
     ],
     extras_require={
         "data": ["pandas","numpy"],
